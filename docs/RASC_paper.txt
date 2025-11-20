@@ -1,0 +1,786 @@
+Reasoning Aware Self-Consistency: Leveraging Reasoning Paths for Efficient LLM Sampling
+
+Guangya Wan1*, Yuqi Wu2*, Jie Chen2,†, Sheng Li1,†
+1School of Data Science, University of Virginia
+2Department of Electrical and Computer Engineering, University of Alberta
+{wxr9et,shengli}@virginia.edu, {yuqi14,jc65}@ualberta.ca
+
+
+
+Abstract
+Self-Consistency mitigates hallucinations in Large Language Models (LLMs) by sampling multiple reasoning paths, but it lacks a system- atic approach to determine the optimal num- ber of samples or select the most faithful ratio- nale. To address this limitation, we introduce Reasoning-Aware Self-Consistency (RASC), a novel framework that enhances sampling effi- ciency and reasoning faithfulness by dynam- ically evaluating both outputs and rationales. RASC assesses the quality of reasoning and the consistency of answers for each generated sample, using these assessments to guide early stopping decisions and rationale selection.The framework employs criteria-based stopping and weighted majority voting, enabling more informed choices on when to halt sampling and which rationale to select. Our comprehensive experiments across diverse question-answering datasets demonstrate that RASC outperforms existing methods, reducing sample usage by approximately 70% while maintaining accu- racy. Moreover, RASC facilitates the selection of high-fidelity rationales, thereby improving the faithfulness of LLM outputs. Our approach effectively addresses the efficiency-accuracy trade-off in LLM reasoning tasks, offering a new perspective for more nuanced, faithful, and effective utilization of LLMs in resource- constrained environments. 1
+1 Introduction
+Large Language Models (LLMs) have demon- strated remarkable complex reasoning capabili- ties in various domains (Wan et al., 2024b; Ahn et al., 2024a), particularly when employing chain- of-thought (CoT) prompting (Wei et al., 2022) which allows LLMs to generate reasoning paths (RPs) before answers. Building upon this, Wang
+
+*These authors contributed equally to this work.
+†Corresponding authors.
+  1Code	available	at:	https://github.com/ wan19990901/RASC/tree/Submission_Code
+
+
+et al. (2023) introduced Self-Consistency (SC), a decoding strategy that significantly enhances rea- soning performance by sampling multiple RPs and marginalizing over these samples. This approach has substantially improved LLM's performance across various reasoning domains (Tan et al., 2023; Ahn et al., 2024b). However, SC's effectiveness is tied to the number of reasoning paths sampled, creating a critical trade-off between performance and computational cost. While the original paper show that sampling more paths (e.g., 40) gener- ally leads to better performance, there's no sys- tematic method to determine the optimal number of samples for any given task. This ambiguity of- ten results in over-sampling, leading to excessive computational demands (Li et al., 2024b). Thus, we need more efficient methods that can maintain SC's reasoning benefits while reducing its compu- tational burden.
+  Recent research has introduced early-stopping mechanisms to address the computational costs of Self-Consistency. Adaptive Consistency (AC) (Ag- garwal et al., 2023) employs incremental sampling, terminating when a clear majority emerges based on a predefined probability distribution, while Early Stopping Self-Consistency (ESC) (Li et al., 2024b) segments the preset sample size into win- dows and stops sampling when answers within a window achieve uniformity. Although these meth- ods effectively reduce computational demands, they fail to address two critical limitations in the original self-consistency approach: (1) they treat all samples equally for sampling decisions, basing the stopping criteria solely on the consistency of fi- nal answers, with this uniform treatment extending to the use of majority voting; (2) these approaches lack of a formal mechanism to distinguish and pri- oritize the most faithful and high-quality rationale among the selected samples, which can be critical in domains that require precise explanations such as healthcare and science (Wang et al., 2024a; Lu
+
+3613
+Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers), pages 3613-3635
+April 29 - May 4, 2025 (c)2025 Association for Computational Linguistics
+
+
+
+Figure 1: Comparison between Self Consistency and Reasoning-Aware Self Consistency (RASC) methods for a reasoning problem. The top half illustrates the standard Self Consistency approach, generating multiple reasoning paths and using majority voting for the final answer. The bottom half demonstrates RASC's improvements: it assigns scores based on the qualities of both answers and reasoning paths, effectively handling incorrect or irrelevant responses. RASC's resampling and stop condition mechanisms optimize sampling, enhancing efficiency and maintaining accuracy. Moreover, RASC enables the selection of the most faithful rationale among generated samples, improving the quality and reliability of the reasoning process in complex tasks
+
+
+et al., 2022; Wu et al., 2024).
+  To address these limitations while preserving the benefits of self-consistency, we propose Reasoning- Aware Self-Consistency (RASC), a framework that enhances the original SC approach. As illustrated in Fig. 1, our method assesses both the rationales across samples and the consistency of final an- swers, which enables more nuanced and efficient sampling. RASC is motivated by the principle that higher-quality rationale often leads to better LLM reasoning (Zelikman et al., 2022). By lever- aging this insight, RASC prioritizes robust rea- soning in decision-making and enables early stop- ping when a consistent pattern of high-quality RP and consistency of answers is observed. This ap- proach not only improves efficiency but also allows RASC to identify the most faithful and high-quality chains of thought among selected samples. Our approach significantly outperforms existing meth- ods across 10 datasets spanning Commonsense, Mathematical, and Symbolic reasoning, reducing sample usage by 60%-80% while maintaining or improving accuracy. Furthermore, experiments demonstrate RASC's ability to select high-fidelity chain-of-thought reasoning, as well as its robust-
+
+ness across various datasets, prompting strategies, and multiple base LLM models, highlighting its adaptability to different efficiency-accuracy trade- offs and application needs. This combination of efficient sampling, high-fidelity reasoning selec- tion, and broad applicability positions RASC as a versatile and powerful tool for enhancing the rea- soning capabilities of large language models. In summary, our key contributions are as follows:
+
+• Analysis of Sampling-Based LLM Reason- ing Techniques: We present the first system- atic evaluation of current SC-based sampling methods for LLM reasoning, offering new insights into their limitations, including the disregard for reasoning quality, uniform sam- ple weighting, and the inability to identify the most faithful rationale.
+
+• Reasoning-Aware Self-Consistency (RASC) Framework: We propose a novel framework that accounts for both rationale quality and answer consistency to dynamically select the number of samples and the best rationale for sampling-based LLM reasoning .
+
+• Robust Evaluation: We showed RASC out- performs existing techniques in efficiency and explanation quality across various settings.
+2 Related Work
+2.1 Self-Consistency and Sampling Methods
+Self-Consistency (SC) (Wang et al., 2023) is a pow- erful decoding strategy that mitigates LLM hallu- cinations by sampling multiple reasoning paths and deriving final answers through majority vot- ing. Recent studies have demonstrated SC's criti- cal importance and versatility across different do- mains: Huang et al. (2024) showed that SC out- performs alternative approaches like multi-agent debate for reasoning tasks, while Chen et al. (2024) and Wang et al. (2024b) successfully extended SC to open-ended generation tasks including reason- ing domains and text summarization. However, despite its effectiveness, SC incurs significant com- putational costs at inference time due to its re- quirement for multiple sampling iterations. To address this limitation, researchers have proposed several adaptive approaches: Adaptive Consistency (AC) (Aggarwal et al., 2023) employs incremental sampling with a Dirichlet-based stopping criterion, while Early-Stopping Self-Consistency (ESC) (Li et al., 2024b) segments sampling into sequential windows and stops when answers achieve unifor- mity. Although these methods effectively reduce computational demands, they primarily focus on checking the consistency of answers but overlook sample quality variations and the reasoning pro- cess's importance. Our work extends these ap- proaches by addressing such limitations, aiming to enhance both the computational efficiency and faithfulness of self-consistency techniques.
+2.2 Chain-of-Thought Prompting and Reasoning Process
+Chain-of-Thought (CoT) prompting (Wei et al., 2022) has significantly enhanced LLM perfor- mance through step-by-step reasoning, with vari- ants (Kojima et al., 2022; Zhou et al., 2023) further refining this approach. Recent work has sparked the idea that higher-quality intermediate reasoning paths lead to better final answers (Zelikman et al., 2022; Zhang et al., 2024a; Khan et al., 2024), con- cerns about the faithfulness of CoT-generated ex- planations have also emerged, particularly the risk of hallucination snowballing (Zhang et al., 2024b). This has prompted a research theme on how to eval- uate the intermedaite reasoning paths (Lightman
+
+et al., 2024; Radhakrishnan et al., 2023; Golovneva et al., 2023) and developing methods for reasoning path correction for better reasoning (Wan et al., 2024a; Miao et al., 2024; Weng et al., 2023).Build- ing on these advancements, our work introduces RASC, which adapts CoT evaluation frameworks to the self-consistency setting to dynamically en- hancing the reliability and faithfulness of SC-based reasoning.
+
+3 Reasoning-Aware Self-Consistency
+Self-Consistency (SC) and its variants enhance question-answering accuracy in Large Language Models (LLMs) by generating multiple answers, but often overlook reasoning processes, leading to inefficient sampling. We propose Reasoning- Aware Self-Consistency (RASC), a framework that optimizes sampling efficiency while maintaining accuracy by evaluating both reasoning paths and answers. RASC introduces a sufficiency scoring function that combines reasoning quality and an- swer consistency features, mapped to a continu- ous score via an optimized classifier. The frame- work employs a dynamic sampling process with a buffer of high-quality samples, stopping when a predefined capacity is reached. Finally, RASC uses weighted majority voting based on the scores to select the final answer and most faithful reasoning path. This approach integrates reasoning evalua- tion into the self-consistency process, offering a more faithful and computationally efficient method for complex question-answering tasks in LLMs.
+
+3.1 Reasoning and Answer Level Features
+We formalize our sufficiency scoring approach by defining a function F : X ? [0, 1], where X rep- resents the space of all possible reasoning-answer pairs. This score is a composite measure of rea- soning quality and answer consistency, indicating whether it's sufficient to terminate sampling. For a given reasoning-answer pair x = (r, a) ? X, we approximate F (x) through a composition of func- tions: F (x) ˜ f?* (?(x)). Here, ? : X ? Rn is a feature extraction function mapping the reasoning- answer pair to an n-dimensional real-valued vector, and f?* : Rn ? [0, 1] is an optimized classifier that outputs a continuous sufficiency score given the n-dimensional input value. To capture both rea- soning quality and answer consistency, we design ? to extract two sets of features:
+Reasoning Quality Features: These features as-
+
+Table 1: Answer-Level and Reasoning-Level Features for RASC. These features were designed based on our preliminary analysis (Appendix A.8) and insights from previous literature (Jin et al., 2024; Li et al., 2024a; Zhang et al., 2023; Huang et al., 2025; Hosking et al., 2024; Bang, 2023; Tu et al., 2020; Golovneva et al., 2023). They capture various aspects of reasoning quality and answer consistency. Symbols in parentheses indicate relationships between samples: *-Consistency targets exact matches, while -Relevance considers vocabulary overlap. This comprehensive set of features enables RASC to make informed decisions about sampling sufficiency. Refer to Table 20 in appendix for specific examples.
+
+Feature	Description	Calculation Answer-Level Features
+
+Local-Consistency
+(at ? at-1)
+Global-Consistency
+(at ? a1, ..., at-1)
+
+Check if the current answer is the same as the prior answer.	LC = 1 if at = at-1,
+otherwise LC = 0
+Check if the current answer is within the previous answers.	GC = 1 if at ? A,
+otherwise GC = 0
+
+Parsing-Error (at)	Ans: error ? Parsing-Error = 1; Ans: 2 ? Parsing-Error = 0	PE = 1 if the answer is
+an error, otherwise
+PE = 0
+Reasoning-Level Features
+
+RP-Length	Reasoning path string length.	RP-Length = len(RP )
+Num-of-Steps (rt)	Number of steps in reasoning paths.	Num-of-Steps =
+count(steps)
+
+Step-Relevance (rt)	The coherence between the reasoning steps (number of
+overlapping words).
+
+SR = |AnB| where
+A = vocab in stept-1,
+B = vocab in stept
+
+Question-Relevance
+(rt ? Q)
+
+The similarity between the input question Q and the reasoning path.
+
+QR = |AnB| where
+A = vocab in question,
+B = vocab in RP
+
+Error-Admitting (rt)	The LLM acknowledges making mistakes during the response.	EA = 1 if ERROR else
+EA = 0
+
+Local-Relevance
+(rt ? rt-1)
+
+Global-Relevance
+(rt ? r1, ..., rt-1)
+
+The similarity between the current and previous generated reasoning paths.
+
+The similarity between the concatenation of all previous sample RPs and the current sample RP.
+
+LR = |AnB| where
+A = vocab in RPt-1,
+B = vocab in RPt
+GR = |AnB| where
+A = vocab in RP1-t-1,
+B = vocab in RPt
+
+
+
+
+
+sess the quality of the RPs generated through CoT prompting. As shown in Table 1, these include measures such as RP-Length, Num-of-Steps, Step- Relevance, and Question-Relevance. These fea- tures capture the coherence, relevance, and depth of the reasoning process. In this study, the rele- vance was calculated as Jaccard Similarity.
+Answer Consistency Features: These fea- tures, including Local-Consistency and Global- Consistency as shown in Table 1, evaluate the con- sistency of answers in the generated samples.
+  The feature extraction function ? now com- bines both Reasoning Quality and Answer Consistency features into a single vector: ?(xi) = [Local Consistency(xi), ..., Global Relevance(xi)]
+
+as our understanding evolves. Importantly, these features are intentionally lightweight, avoiding computationally intensive extractors to optimize the cost of SC while maintaining effectiveness.
+3.2 Sampling and Decision Process
+Sufficiency Score Computation: We learn a scor- ing function f : Rn ? [0, 1] from a family of parameterized functions F, where each function is denoted as f? for parameters ?. Given a dataset D = (xi, yi)M , where xi = ?(ri, ai) is the feature vector of the i-th reasoning-answer pair (ri, ai), and yi ? 0, 1 indicates the correctness of the answer, we obtain the optimal parameters ?* by minimizing:
+
+Feature Set Applicability and Extensibility: Our feature set provides a strong foundation for evaluating reasoning quality and answer consis-
+
+?* = arg min
+?
+
+1
+
+
+M
+i=1
+
+L(f?(xi), yi)
+
+(1)
+
+tency. We designed ? with a modular architecture to allow future integration of additional features
+
+Where L represents the loss function (e.g., cross- entropy).
+
+
+
+Figure 2: Reasoning-Aware quality features. Different colour corresponds to different feature visualizations. Ans: Output Answer. The upper dashed box is the reasoning-level features, and the lower dashed box is the answer-level features. The blue and purple arrows represent relative relations between different samples (consistency and relevance).
+
+Stop Condition: For a sequence of K sampled reasoning-answer pairs xiK , we compute suf- ficiency scores SSi = f?(?(xi)) using the opti- mized function f?. We maintain a buffer B of high-quality pairs with sufficiency scores above a predefined threshold T :
+
+          B = (ri, ai) | SSi = T	(2)
+The sampling process terminates when |B| = N , where N is a predefined capacity.
+Key Trade-off Parameters: N and T are crucial for balancing sample reduction and accuracy. N determines the number of high-quality samples re- quired before stopping, while T sets the threshold for considering a sample as high-quality. Adjusting these parameters allows RASC to prioritize either greater sample reduction or higher accuracy.
+Weighted Sampling for Answer and Rationale: Upon reaching the stop condition, RASC deter- mines the final answer and reasoning path through weighted majority voting using the sufficiency scores of pairs in B:
+
+
+
+Algorithm 1 RASC Early Stopping
+
+1: Input: Query Q, Threshold T , Buffer Size N , Scoring Function F , Base LLM M
+2: Output: Final Answer Abest, Best Reasoning
+Apth RPbest
+3: B ? {} ## Initialize empty buffer
+4: while |B| < N do
+5:	(Ai, RPi) ? M(Q)
+6:	SSi ? F (Ai, RPi)
+7:	if SSi = T then
+8:	B ? B ? {(Ai, RPi, SSi)}
+9:	end if
+10: end while
+11: A ? {A|(A, RP, SS) ? B}
+12: Abest ? arg max	(A',RP,SS)?B:A'=A SS
+A?A
+13:  RPbest  ? arg max{SS|(Abest, RP, SS)  ?
+RP
+B}
+14: return Abest, RPbest
+
+
+pairs, and SSi is the sufficiency score for the i- th pair. This approach ensures that higher-quality reasoning-answer pairs have greater influence on the final decision. The answer (Ans) with the high- est weighted sum of sufficiency scores is selected, and then the most faithful reasoning path (RP) is chosen as the one with the highest sufficiency score among those supporting the selected answer. For complete details, refer to Algorithm 1 and Ap- pendix C for theoretical justification.
+
+4 Experiments
+4.1 Experimetnal Setup
+Baseline and Data: We compare RASC against three established baseline methods: SC (Wang et al., 2023), AC (Aggarwal et al., 2023), and ESC (Li et al., 2024b). Following the previous work, our main evaluation dataset comprises 16,725 sam- ples spanning commonsense reasoning (Date Un- derstanding, CommonsenseQA), symbolic reason- ing (boolean expressions, disambiguation, last let- ters), and mathematical reasoning (GSM8K, AS-
+
+
+(Ans, RP) =
+
+arg max ??	  
+a?A	(r ,a )?B,a =a
+
+SSi?? ,
+
+DIV, MathQA, SVAMP). To assess generalizability on unseen data, we use out-of-distribution datasets including BigBench (bench authors, 2023) and
+
+arg max
+rj :(rj,Ans)?B
+
+SSj)	(3)
+
+StrategyQA (Geva et al., 2021), comprising an additional 10,824 examples that require implicit reasoning steps across various topics. See the Ap-
+
+where A represents the set of possible answers,
+B is the buffer of high-quality reasoning-answer
+
+pendix for the configurations of the baseline meth- ods (A.4) and the data (A.6).
+
+Table 2: Performance of Different Reasoning Methods on Mathematical, Commonsense, and Symbolic Reasoning Benchmarks, including Chain-of-Thought (CoT), Self-Consistency (SC), Early-Stopping Self-Consistency (ESC), Adaptive Consistency (AC), and Reasoning-Aware Self-Consistency (RASC). Metrics include Number of Samples Generated ( # of Gen), Accuracy (Acc), and Gained Accuracy per Sample relative to CoT.
+
+ModelMethodBenchmark CategoryMathematical ReasoningCommonsense ReasoningSymbolic Reasoning# of GenAccGain/Sample# of GenAccGain/Sample# of GenAccGain/SampleCoT182.1%-183.2%-192.5%-SC4087.5%0.139%4088.0%0.123%4097.3%0.123%GPT-4ESC6.86 (-82.9%)87.3%0.889%7.93 (-80.2%)88.5%0.767%5.54 (-86.2%)97.3%1.056%AC5.89 (-85.3%)87.3%1.065%6.15 (-84.6%)87.2%0.779%4.43 (-88.9%)97.3%1.395%RASC4.59 (-88.5%)87.5%1.503%4.74 (-88.1%)88.3%1.367%4.19 (-89.5%)97.3%1.500%CoT163.5%-171.2%-180.1%-SC4069.1%0.144%4076.1%0.126%4085.3%0.134%GPT-3.5 TurboESC14.94 (-62.7%)69.3%0.417%10.86 (-72.9%)76.4%0.527%7.55 (-81.1%)86.0%0.903%AC12.49 (-68.8%)67.6%0.357%8.34 (-79.2%)75.0%0.517%6.39 (-84.0%)84.7%0.853%RASC6.62 (-83.5%)69.4%1.054%4.95 (-87.6%)76.1%1.238%4.36 (-89.1%)85.3%1.547%CoT136.2%-150.1%-141.5%-SC4041.7%0.141%4055.9%0.149%4047.3%0.149%Vicuna-13BESC20.29 (-49.3%)40.5%0.223%20.89 (-47.8%)50.5%0.020%23.05 (-42.4%)44.0%0.113%AC17.44 (-56.4%)42.3%0.371%19.92 (-50.2%)55.9%0.306%25.77 (-35.6%)49.3%0.314%RASC8.24 (-79.4%)42.0%0.801%7.83 (-80.4%)55.0%0.718%8.71 (-78.2%)45.3%0.494%CoT118.5%-163.2%-119.5%-SC4023.0%0.115%4068.9%0.146%4024.2%0.121%Llama2-7BESC27.25 (-31.9%)23.5%0.190%8.85 (-77.9%)68.9%0.726%31.03 (-22.4%)24.8%0.177%AC23.91 (-40.2%)21.5%0.131%7.97 (-80.1%)68.3%0.735%24.62 (-38.5%)24.2%0.199%RASC10.71 (-73.2%)23.2%0.484%5.11 (-87.2%)68.9%1.390%13.09 (-67.3%)24.8%0.439%
+
+Implementation Details: Our experiments utilize
+LLAMA2-7B (Meta, 2024), GPT3.5-turbo/GPT4
+(OpenAI, 2024), and Vicuna-13B (Chiang et al., 2023). For parameters of our algorithm, we make buffer size N being 5 with a quality threshold T of
+0.5 based on experimental results in Figure 3. We use customized metrics that measure the trade-off between efficiency and accuracy to select the best hyper-parameters. We use Logistic Regression as a lightweight sufficiency scoring model, which shows a comparable correlation with human judg- ments and efficiency on running time. We keep the parameters learned from training set and apply it on testset to prevent overfitting. LLM inference is applied with a temperature of 0.5. See Appendix A for further details on experimental setup, includ- ing computational resources, model configurations, and prompts. Additional results, including analysis of various base models and Pearson correlation of other NLG metrics with human juedgement, can be found in Appendix B.
+
+4.2 Main Results
+RASC Excels Across Diverse Reasoning Tasks and LLMs: Table 2 showcases RASC's perfor- mance across a wide spectrum of reasoning tasks and base Language Models (LLMs). Our compre- hensive analysis reveals that RASC consistently achieves superior sample efficiency while main-
+
+taining similar accuracy across mathematical, com- monsense, and symbolic reasoning tasks. This su- perior performance and efficiency are statistically significant across multiple benchmarks and mod- els, as detailed in Appendix B.2. The robustness of performance of RASC is further highlighted by its consistent effectiveness across diverse LLMs, from closed-source models like GPT-3.5 Turbo and GPT- 4 to open-source alternatives such as Vicuna-13B and Llama2-7B.
+Table 3: Performance and Time Analysis of Methods Using GPT-4. Analysis of other models and costs can be found in Appendix B.3.
+
+MethodAccuracy (%)Inference Time (s)Non- Inference Time (s) Total Time (s)SC90.9398.90.00398.9ESC91.067.80.0467.9AC90.654.90.0655.0RASC91.045.12.0547.2Note: Values are averages per question over all data.
+
+RASC Excels in Computational Efficiency: Ta- ble 3 empirically highlights RASC's improvement in computational efficiency over other methods. While SC incurs minimum additional computa- tional overhead, it requires the longest inference time. AC and ESC, on the other hand, introduce rel- atively small overhead due to their stopping criteria
+
+Table 4: Performance comparison of different feature sets across reasoning tasks. Answer-level features include final answer characteristics. Reasoning-level features capture the quality of the reasoning process. Combined Features incorporate both answer-level and reasoning-level features. See Table 1 for more feature details.
+
+Feature SetMathematical Reasoning
+# Gen	Acc (%)Symbolic
+# GenReasoning
+Acc (%)CommonSense Reas
+# Gen	Acconing
+(%)Answer-level only10.8655.57.7558.06.6574.9Reasoning-level only5.5050.44.3055.93.0872.4Combined Features8.2055.86.2858.15.6375.0Results are averaged across all datasets and models. # Gen: Average number of generated samples. Acc: Accuracy.
+
+
+Figure 3: Effects of varying N and T on performance tradeoffs, illustrating how changes in these parameters impact both accuracy (RASC Correctness) and the average number of samples generated.
+
+
+calculations. RASC, although introducing the high- est non-inference processing time for feature ex- traction, substantially reduces the overall inference time, which typically constitutes the largest portion of the total computational cost. Notably, RASC reduces inference time by approximately 80% com- pared to SC, while maintaining similar accuracy, and outperforming other efficient methods. We thus claim that as long as the non-inference over- head remains relatively smaller than the savings in inference time, RASC will consistently prove more computationally efficient. These gains hold across other evaluated models and is especially significant when inference speed is slower, as demonstrated in Table 14 in the Appendix.
+4.3 Analysis
+Robust Performance and Tunable Efficiency:
+Fig. 3 shows RASC's performance across various
+
+threshold (T ) and buffer size (N ) configurations. RASC demonstrates a unique combination of per- formance stability and customizable efficiency. Ac- curacy improves consistently as T increases from
+0.1 to 0.5, with the most significant gains between T = 0.1 and T = 0.3. Increasing N from 3 to 7 generally enhances accuracy, albeit with di- minishing returns. This stability across hyper- parameter values showcases RASC's robustness. RASC allows preference-based tuning: lower T and N values prioritize efficiency with minimal accuracy loss, ideal for resource-constrained sce- narios, while higher values maximize accuracy at increased computational cost. This dual character- istic of robustness and adaptability enables RASC to optimize for specific accuracy or efficiency re- quirements across various computational environ- ments.
+Performance Analysis on Tasks with Varying
+
+Table 5: Performance on MMLU Math Categories (GPT-4)
+
+
+Method Elementary Mathematics  College MathematicsAbstract Algebra#GenAcc  Gain/Sample#GenAcc  Gain/Sample#GenAcc  Gain/SampleCoT195.8	-175.4	-171.0	-SC4097.8	0.0514084.0	0.2314076.0	0.128ESC97.6	0.55883.8	1.11475.8	0.442(-89.4%)(-77.7%)(-68.9%)ASC97.7	0.66983.7	1.32375.7	0.510(-90.4%)(-81.1%)(-74.3%)(-92.2%)(-84.6%)(-78.7%)Note: Categories arranged in order of increasing diffi- culty (Elementary ? College ? Abstract)
+
+
+Difficulty: To further validate RASC's effective- ness across different difficulty levels, we conducted experiments using the MMLU benchmark, exam- ining performance on mathematical topics of vary- ing complexity: Elementary Mathematics, College Mathematics, and Abstract Algebra.
+  The results reveal two key patterns. For harder tasks (Abstract Algebra), RASC requires more samples (8.54 vs 6.15 for College Math) to achieve confident stopping, reflecting the reasoning varia- tions in evaluating complex reasoning and result in better performance gains. However, for easier tasks (Elementary Mathematics), RASC achieves
+
+of considering both the reasoning path and the fi- nal answer in evaluating and optimizing language model outputs.
+Selection of High-Fidelity Chains of Thought: Table 6 demonstrates RASC's superiority over Self- Consistency (SC) in rationale selection across tra- ditional metrics and manual evaluation, with a 0.7- point increase in Human-Eval Score on a 5-point scale. Qualitative analysis in Appendix also sup- ports this: for a travel distance question (Table 9, Sample 1), RASC provides a clear, correct ex- planation (human scores: 5) while SC introduces ambiguity (scores: 2). This analysis shows RASC's superior capability in selecting faithful and high- quality Chains of Thought (CoTs), consistently producing more accurate, coherent, and relevant explanations for improved problem-solving.
+Table 6: Comparison of RASC and SC on CoT Faith- fulness. This evaluation used 200 randomly selected questions from our training set. For RASC, we picked the CoT with the highest sufficiency score, and for SC, we selected a random CoT sample that produced the cor- rect final answer. The evaluation assessed BARTScore, CTC, BLURT, and human-evaluated faithfulness scores. For BARTScore, CTC, and BLURT, we manually cre- ated golden CoTs as reference.
+
+extreme sampling efficiency due to rapid recogni-		
+
+tion of correct reasoning patterns although with a slight less performance improvement. Notably, while harder tasks require more samples, they still maintain significantly reduced sampling compared to SC , demonstrating RASC's ability to balance sampling efficiency with task complexity.
+Individual Impact of Reasoning-Level and Answer-Level Features: Our comprehensive ab- lation studies reveal the crucial interplay between reasoning-level and answer-level features across various reasoning tasks. Table 4 demonstrates that integrating both feature types consistently out- performs models using either feature set alone regarding the trade-off between accuracy and number of samples generated, validating our hy- pothesis of their complementary nature. While answer-level features provide a strong baseline, as established in previous work, our novel incorpo- ration of reasoning-level features, providing ad- ditional insights form the intermediate reasoning, significantly enhances the model's capabilities in distinguishing better samples, thus reducing the number of generations needed. This synergistic combination enables a more holistic capture of the reasoning process, highlighting the importance
+
+Metric	RASC	SC	Diff.
+
+BARTScore (Yuan et al., 2021)	0.61	0.39	+0.22
+CTC (Deng et al., 2021)	0.55	0.45	+0.10
+BLURT (Sellam et al., 2020)	0.58	0.42	+0.16
+Human-Eval Scorea	4.7	4.0	+0.70
+
+aOn a scale of 1-5. All other scores range 0-1, represent- ing ranked-based scores where 1 indicates better metrics for RASC over SC and 0 means the other way around. See Appendix A.11 for details on human evaluation criteria and golden CoT creation process.
+
+
+4.4 Robustness and Generalizability
+
+Table 7: Impact of Different Prompting Strategies on Performance on 100 Random Question from GSM8K dataset, a subset data from Mathematical Reasoning, with GPT-3.5 Turbo (a/b: a = accuracy (%), b = avg. samples)
+
+MethodZero-shotFew-shotLeast-to-MostSC69.0 / 40.075.0 / 40.085.0 / 40.0ESC67.0 / 9.375.0 / 9.585.0 / 8.8AC69.0 / 8.874.0 / 8.485.0 / 7.0RASC69.0 / 5.175.0 / 5.385.0 / 5.0
+RASC is consistent on Different Prompts:
+To check RASC's robustness to different input
+
+prompts, we evaluated RASC's performance using three distinct CoT prompting strategies: zero-shot (Kojima et al., 2022), few-shot (Wei et al., 2022), and least-to-most (Zhou et al., 2023). As Table.7 shows, RASC consistently outperforms other meth- ods across all prompting strategies, demonstrating higher accuracy and lower sample (5 steps on av- erage) requirements. This consistency highlights RASC's adaptability to various ways of eliciting reasoning from language models.
+Cross-Domain Adaptability and Performance Scaling: To evaluate RASC's generalizability be- yond our training distribution for reasoning eval- uations, we tested it on two external datasets, in- cluding BigBench (bench authors, 2023) and Strat- egyQA (Geva et al., 2021) comprising 10,824 ex- amples requiring implicit reasoning steps across various topics. Using GPT3.5 turbo as the base model, RASC demonstrated robust performance on these unseen, complex datasets. As illustrated in Figure 6 in Appendix, RASC achieved the highest accuracy while significantly reducing the average number of samples generated compared to other methods. Notably, RASC outperformed SC in ac- curacy (0.581 vs 0.579) while using only 14.5% of the samples (5.8 vs 40.0). It also surpassed both ESC and AC in both accuracy and efficiency. This performance suggests RASC's resilience across varied data distributions, highlighting its ability to generalize effectively to novel reasoning tasks without compromising accuracy or computational efficiency.
+
+5 Conclusion
+Through our investigation of sampling-based LLM reasoning, we discovered that the quality of inter- mediate reasoning paths serves as a crucial early indicator for efficient sampling decisions. Building on this insight, we developed RASC, a framework that strategically incorporates reasoning path evalu- ation into the sampling process. Our approach not only achieved a 60-80% reduction in required sam- ples while maintaining accuracy. By introducing principled methods for assessing reasoning qual- ity and selecting the most faithful rationale from generated samples, RASC provides a systematic so- lution to the challenge of balancing computational efficiency with reasoning reliability in LLMs. The framework's success across diverse reasoning tasks demonstrates that focusing on the quality of inter- mediate reasoning, rather than just final answers,
+
+offers a promising direction for developing more efficient and trustworthy LLM reasoning systems.
+6 Limitations
+While RASC demonstrates significant improve- ments in efficiency and faithfulness across various reasoning tasks, it is important to acknowledge some limitations and areas for future research:
+• Feature Limitations: While RASC signif- icantly reduces LLM calls, its reliance on manually designed features introduces com- putational overhead and potential limitations. The feature extraction process adds process- ing time that, although generally outweighed by savings from reduced LLM calls, could im- pact performance in scenarios requiring rapid responses or when handling large batches of simple queries. Moreover, these hand-crafted features, while empirically effective, may not capture all aspects of high-quality reasoning across different domains. Future work could explore adaptive strategies that dynamically adjust feature computation based on runtime constraints, investigate lightweight feature ap- proximations, and leverage unsupervised or transfer learning approaches to automatically identify more comprehensive reasoning qual- ity features.
+• Faithfulness Evaluation: While we have shown improvements in faithfulness of the selected chain of thought reasoning, the evalu- ation relies on automated metrics and limited human evaluation. A more extensive human evaluation could provide stronger evidence on our work.
+
+
+References
+Pranjal Aggarwal, Aman Madaan, Yiming Yang, et al. 2023. Let's sample step by step: Adaptive- consistency for efficient reasoning and coding with llms. In Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing, pages 12375-12396.
+Janice Ahn, Rishu Verma, Renze Lou, Di Liu, Rui Zhang, and Wenpeng Yin. 2024a. Large language models for mathematical reasoning: Progresses and challenges. In Proceedings of the 18th Conference of the European Chapter of the Association for Com- putational Linguistics: Student Research Workshop, pages 225-237, St. Julian's, Malta. Association for Computational Linguistics.
+
+Janice Ahn, Rishu Verma, Renze Lou, Di Liu, Rui Zhang, and Wenpeng Yin. 2024b. Large language models for mathematical reasoning: Progresses and challenges. In Proceedings of the 18th Conference of the European Chapter of the Association for Com- putational Linguistics.
+Anthropic. 2024. The claude 3 model family: Opus, sonnet, haiku. Available online. Accessed: 2024-06- 01.
+Fu Bang. 2023. Gptcache: An open-source semantic cache for llm applications enabling faster answers and cost savings. In Proceedings of the 3rd Work- shop for Natural Language Processing Open Source Software (NLP-OSS 2023), pages 212-218.
+BIG bench authors. 2023. Beyond the imitation game: Quantifying and extrapolating the capabilities of lan- guage models. Transactions on Machine Learning Research.
+Xinyun Chen, Renat Aksitov, Uri Alon, Jie Ren, Ke- fan Xiao, Pengcheng Yin, Sushant Prakash, Charles Sutton, Xuezhi Wang, and Denny Zhou. 2024. Uni- versal self-consistency for large language models. In ICML 2024 Workshop on In-Context Learning.
+Wei-Lin Chiang, Zhuohan Li, Zi Lin, Ying Sheng, Zhanghao Wu, Hao Zhang, Lianmin Zheng, Siyuan Zhuang, Yonghao Zhuang, Joseph E. Gonzalez, Ion Stoica, and Eric P. Xing. 2023. Vicuna: An open- source chatbot impressing gpt-4 with 90%* chatgpt quality.
+Mingkai Deng, Bowen Tan, Zhengzhong Liu, Eric Xing, and Zhiting Hu. 2021. Compression, transduction, and creation: A unified framework for evaluating natural language generation. In Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing, pages 7580-7605, Online and Punta Cana, Dominican Republic. Association for Computational Linguistics.
+Mor Geva, Daniel Khashabi, Elad Segal, Tushar Khot, Dan Roth, and Jonathan Berant. 2021. Did aristotle use a laptop? a question answering benchmark with implicit reasoning strategies. Transactions of the Association for Computational Linguistics, 9:346- 361.
+Olga Golovneva, Moya Peng Chen, Spencer Poff, Mar- tin Corredor, Luke Zettlemoyer, Maryam Fazel- Zarandi, and Asli Celikyilmaz. 2023. ROSCOE: A suite of metrics for scoring step-by-step reason- ing. In The Eleventh International Conference on Learning Representations.
+Or Honovich, Roee Aharoni, Jonathan Herzig, Hagai Taitelbaum, Doron Kukliansy, Vered Cohen, Thomas Scialom, Idan Szpektor, Avinatan Hassidim, and Yossi Matias. 2022. TRUE: Re-evaluating factual consistency evaluation. In Proceedings of the 2022 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, pages 3905-3920, Seattle,
+
+United States. Association for Computational Lin- guistics.
+
+Tom Hosking, Phil Blunsom, and Max Bartolo. 2024. Human feedback is not gold standard. In The Twelfth International Conference on Learning Representa- tions.
+
+Jie Huang, Xinyun Chen, Swaroop Mishra, Huaixiu Steven Zheng, Adams Wei Yu, Xiny- ing Song, and Denny Zhou. 2024. Large language models cannot self-correct reasoning yet. In The Twelfth International Conference on Learning Representations.
+
+Lei Huang, Weijiang Yu, Weitao Ma, Weihong Zhong, Zhangyin Feng, Haotian Wang, Qianglong Chen, Weihua Peng, Xiaocheng Feng, Bing Qin, and Ting Liu. 2025. A survey on hallucination in large lan- guage models: Principles, taxonomy, challenges, and open questions. ACM Trans. Inf. Syst., 43(2).
+
+Mingyu Jin, Qinkai Yu, Dong Shu, Haiyan Zhao, Wenyue Hua, Yanda Meng, Yongfeng Zhang, and Mengnan Du. 2024. The impact of reasoning step length on large language models. In Findings of the Association for Computational Linguistics: ACL 2024, pages 1830-1842, Bangkok, Thailand. Associ- ation for Computational Linguistics.
+
+Akbir Khan, John Hughes, Dan Valentine, Laura Ruis, Kshitij Sachan, Ansh Radhakrishnan, Edward Grefenstette, Samuel R. Bowman, and Tim Rock- täschel. 2024. Debating with more persuasive llms leads to more truthful answers. In Proceedings of the International Conference on Machine Learning (ICML).
+
+Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yu- taka Matsuo, and Yusuke Iwasawa. 2022. Large language models are zero-shot reasoners. Advances in neural information processing systems, 35:22199- 22213.
+
+Junlong Li, Fan Zhou, Shichao Sun, Yikai Zhang, Hai Zhao, and Pengfei Liu. 2024a. Dissecting human and LLM preferences. In Proceedings of the 62nd An- nual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers), pages 1790- 1811, Bangkok, Thailand. Association for Computa- tional Linguistics.
+
+Yiwei Li, Peiwen Yuan, Shaoxiong Feng, Boyuan Pan, Xinglin Wang, Bin Sun, Heda Wang, and Kan Li. 2024b. Escape sky-high cost: Early-stopping self- consistency for multi-step reasoning. In The Twelfth International Conference on Learning Representa- tions.
+
+Hunter Lightman, Vineet Kosaraju, Yuri Burda, Harri- son Edwards, Bowen Baker, Teddy Lee, Jan Leike, John Schulman, Ilya Sutskever, and Karl Cobbe. 2024. Let's verify step by step. In The Twelfth Inter- national Conference on Learning Representations.
+
+Pan Lu, Swaroop Mishra, Tony Xia, Liang Qiu, Kai- Wei Chang, Song-Chun Zhu, Oyvind Tafjord, Peter Clark, and Ashwin Kalyan. 2022. Learn to explain: Multimodal reasoning via thought chains for science question answering. In Advances in Neural Informa- tion Processing Systems.
+Meta. 2024. Meetllama3. Blog post. Available: https:
+//llama.meta.com/llama3/.
+Ning Miao, Yee Whye Teh, and Tom Rainforth. 2024. Selfcheck: Using LLMs to zero-shot check their own step-by-step reasoning. In The Twelfth International Conference on Learning Representations.
+OpenAI. 2024. Introducing gpt-3.5 turbo. Blog post. Available: https://platform.openai.com/docs/ models/gpt-3-5-turbo.
+Ansh Radhakrishnan, Karina Nguyen, Anna Chen, Carol Chen, Carson Denison, Danny Hernandez, Esin Durmus, Evan Hubinger, Jackson Kernion, Kamile? Lukošiu¯te?, Newton Cheng, Nicholas Joseph, Nicholas Schiefer, Oliver Rausch, Sam McCandlish, Sheer El Showk, Tamera Lanham, Tim Maxwell, Venkatesa Chandrasekaran, Zac Hatfield-Dodds, Jared Kaplan, Jan Brauner, Samuel R. Bowman, and Ethan Perez. 2023. Question decomposition im- proves the faithfulness of model-generated reasoning. Preprint, arXiv:2307.11768.
+Thibault Sellam, Dipanjan Das, and Ankur P Parikh. 2020. Bleurt: Learning robust metrics for text gener- ation. In Proceedings of ACL.
+Yiming Tan, Dehai Min, Yu Li, Wenbo Li, Nan Hu, Yongrui Chen, and Guilin Qi. 2023. Can chatgpt replace traditional kbqa models? an in-depth analysis of the question answering performance of the gpt llm family. In International Semantic Web Conference, pages 348-367. Springer.
+Zhengkai Tu, Wei Yang, Zihang Fu, Yuqing Xie, Luchen Tan, Kun Xiong, Ming Li, and Jimmy Lin. 2020. Approximate nearest neighbor search and lightweight dense vector reranking in multi-stage retrieval architectures. In Proceedings of the 2020 ACM SIGIR on International Conference on Theory of Information Retrieval, pages 97-100.
+Guangya Wan, Yuqi Wu, Jie Chen, and Sheng Li. 2024a. Cot rerailer: Enhancing the reliability of large language models in complex reasoning tasks through error detection and correction. Preprint, arXiv:2408.13940.
+Guangya Wan, Yuqi Wu, Mengxuan Hu, Zhixuan Chu, and Sheng Li. 2024b. Bridging causal discovery and large language models: A comprehensive sur- vey of integrative approaches and future directions. Preprint, arXiv:2402.11068.
+Li Wang, Xi Chen, XiangWen Deng, Hao Wen, MingKe You, WeiZhi Liu, Qi Li, and Jian Li. 2024a. Prompt engineering in consistency and reliability with the evidence-based guideline for llms. npj Digital Medicine, 7(1):41.
+
+Xinglin Wang, Yiwei Li, Shaoxiong Feng, Peiwen Yuan, Boyuan Pan, Heda Wang, Yao Hu, and Kan Li. 2024b. Integrate the essence and eliminate the dross: Fine-grained self-consistency for free-form language generation. In Proceedings of the 62nd Annual Meet- ing of the Association for Computational Linguistics (Volume 1: Long Papers), pages 11782-11794.
+Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc V Le, Ed H. Chi, Sharan Narang, Aakanksha Chowdhery, and Denny Zhou. 2023. Self-consistency improves chain of thought reasoning in language models. In The Eleventh International Conference on Learning Representations.
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Fei Xia, Ed Chi, Quoc V Le, Denny Zhou, et al. 2022. Chain-of-thought prompting elicits rea- soning in large language models. Advances in neural information processing systems, 35:24824-24837.
+Yixuan Weng, Minjun Zhu, Fei Xia, Bin Li, Shizhu He, Shengping Liu, Bin Sun, Kang Liu, and Jun Zhao. 2023. Large language models are better reasoners with self-verification. In The 2023 Conference on Empirical Methods in Natural Language Processing.
+Yuqi Wu, Kaining Mao, Yanbo Zhang, and Jie Chen. 2024. Callm: Enhancing clinical interview analy- sis through data augmentation with large language models. IEEE Journal of Biomedical and Health Informatics, 28(12):7531-7542.
+Weizhe Yuan, Graham Neubig, and Pengfei Liu. 2021. Bartscore: Evaluating generated text as text genera- tion. In Advances in Neural Information Processing Systems, volume 34, pages 27263-27277. Curran Associates, Inc.
+Eric Zelikman, Yuhuai Wu, Jesse Mu, and Noah Good- man. 2022. STar: Bootstrapping reasoning with reasoning. In Advances in Neural Information Pro- cessing Systems.
+Dan Zhang, Sining Zhoubian, Ziniu Hu, Yisong Yue, Yuxiao Dong, and Jie Tang. 2024a. ReST-MCTS*: LLM self-training via process reward guided tree search. In The Thirty-eighth Annual Conference on Neural Information Processing Systems.
+Muru Zhang, Ofir Press, William Merrill, Alisa Liu, and Noah Smith. 2024b. How language model hallucina- tions can snowball. In Proceedings of the 41st Inter- national Conference on Machine Learning (ICML), Honolulu, Hawaii. PMLR.
+Yue Zhang, Yafu Li, Leyang Cui, Deng Cai, Lemao Liu, Tingchen Fu, Xinting Huang, Enbo Zhao, Yu Zhang, Yulong Chen, et al. 2023. Siren's song in the ai ocean: a survey on hallucination in large language models. arXiv preprint arXiv:2309.01219.
+Denny Zhou, Nathanael Schärli, Le Hou, Jason Wei, Nathan Scales, Xuezhi Wang, Dale Schuurmans, Claire Cui, Olivier Bousquet, Quoc V Le, and Ed H.
+
+Chi. 2023. Least-to-most prompting enables com- plex reasoning in large language models. In The Eleventh International Conference on Learning Rep- resentations.
+
+A Appendix: Experimental Details
+A.1 Base Models
+The language models used in our experiments have varying numbers of parameters:
+• LLAMA2-7B: This model has 8 billion parame- ters (Meta, 2024).
+• GPT3.5-turbo: The exact number of param- eters for this model is not publicly disclosed by OpenAI (OpenAI, 2024).
+• Claude-3-Haiku: The number of parameters for this model is not publicly available from Anthropic (Anthropic, 2024).
+• Vicuna-13B: This model has 13 billion pa- rameters (Chiang et al., 2023).
+A.2 Computational Resources and Infrastructure
+Our experiments were conducted using various models and computing resources. Below, we detail the computational budget for each model and the specifications of our computing infrastructure.
+Computational Budget
+• LLAMA2-7B: We consumed approximately 100 GPU hours for generating all the collected data, running the model, generating CoT sam- ples, and processing the results.
+• GPT3.5-turbo: Approximately $500 was spent on API calls to OpenAI, covering all experiments including data generation, CoT samples, and result processing.
+• Claude-3-Haiku: The total cost for API calls to Anthropic was approximately $300.
+• Vicuna-13B: We utilized approximately 150 GPU hours for experiments, including exper- imental running, inference on CoT samples, and data processing.
+  Computing Infrastructure Our experiments were conducted on a computing infrastructure equipped with the following hardware:
+• GPU: NVIDIA GeForce RTX 3070 Ti
+• 
+CPU: 16 cores 11th Generation Intel Core i7 Processors
+• RAM: 64GB DDR4
+• Storage: 1TB NVMe SSD
+  This infrastructure provided the necessary com- putational power and storage capacity to efficiently run our experiments across various models and datasets.
+A.3 Model Configurations
+• Temperature: For all LLM calls, we used a temperature setting of 0.7 to balance creativity and coherence in the generated outputs.
+• Max Tokens: The maximum number of to- kens for each response was set to 1024 for consistency across models.
+• Top-p (nucleus sampling): We used a top- p value of 0.95 for all model calls to ensure diverse yet relevant outputs.
+A.4 Algorithm Configurations
+• ESC Algorithm: We used a window size of 5 for the Entropy-based Stopping Criteria (ESC) algorithm.
+• Adaptive  Consistency  Algorithm: We used the default settings with stop- ping_criteria=BetaStoppingCriteria(0.95) and max_gens = 40.
+A.5 Used Packages
+In this study, several online available Python pack- ages are used to conduct experiments and analysis:
+• NLTK: For calculating Jaccard Similarity, Ngram, tokenizer
+• statistics: For computing logistic regression
+• PyTorch: For using pre-trained LLM
+• pandas: For data manipulation
+• json: Loading and saving JSON data
+• sklearn: For supervised learning models train- ing and evaluation
+• adaptive_consistency: For implementing adaptive consistency algorithm
+
+• Levenshtein: For computing Levenshtein dis- tance
+• transformers: For Hugging Face pre-trained model usage
+• LangChain: For LLM API usage and answer parser
+A.6 Datasets
+To assess the generalizability and robustness of our proposed Reasoning-Aware Self-Consistency (RASC) method, we utilize a diverse range of datasets across multiple reasoning categories. Our evaluation leverages Question Answering datasets spanning three main categories:
+  Mathematical Reasoning: GSM8K, ASDIV, MathQA, SVAMP
+  Commonsense Reasoning: Date Understand- ing, CommonsenseQA
+  Symbolic Reasoning: Boolean Expressions, Disambiguation, Last Letters
+  These datasets provide a comprehensive foun- dation for evaluating our method across various problem domains and task types.
+  Out-of-Domain (OOD) Data: To rigorously test the adaptability and robustness of our RASC method, we incorporate out-of-domain (OOD) data, specifically StrategyQA (Geva et al., 2021) and BigBench (bench authors, 2023). StrategyQA is a question answering benchmark designed for multi-hop reasoning, featuring:
+• 2,780 examples requiring implicit reasoning steps.
+• Diverse, short questions covering a wide range of strategies.
+• Annotations including reasoning step decom- position and supporting evidence.
+• A novel data collection procedure to ensure challenging and diverse questions.
+BigBench is a comprehensive benchmark consist- ing of:
+• 204 tasks contributed by 450 authors across 132 institutions.
+• Diverse topics including linguistics, math, common-sense reasoning, and social bias.
+• Tasks designed to be beyond the capabilities of current language models.
+• 
+Evaluations across various model scales and architectures.
+By using these datasets, we aim to evaluate RASC's performance on questions that require complex, multi-step reasoning strategies not ex- plicitly stated in the question. This allows us to verify the performance of our method on unseen data that demands sophisticated reasoning capabil- ities, providing insights into its real-world applica- bility and resilience across different computational environments and language model architectures. Using GPT3.5 turbo as the base model, RASC demonstrated robust performance on these unseen, complex datasets, comprising a total of 10,824 ex- amples requiring implicit reasoning steps across various topics.
+A.7 Data Processing
+We used a custom data preprocessing pipeline im- plemented in Python to clean and prepare the input data for our experiments:
+• For text normalization, we employed NLTK's word_tokenize and WordNetLemmatizer.
+• We used the json_parser module to parse the results and extract quality features from the model outputs.
+• Our preprocessing pipeline includes steps for handling missing data, removing duplicates, and standardizing text formats.
+For more detailed information on our data processing techniques,	please refer to our GitHub repository https://anonymous.4open. science/r/SC_conf-2D4B/README.md.
+A.8 Common LLM Errors and Feature Selection
+A.8.1 Common LLM Errors
+As a crucial part of the solution, a faithful rea- soning path is even more important than simply getting the correct answer to the question. There- fore, it is crucial for sampling methods, such as self-consistency, to consider the content quality of the reasoning path itself. To better understand the types of errors that LLM often makes during the response, we utilize common mathematical reasoning and commonsense reasoning datasets to systematically summarize the common errors. We start with the common errors observed by Golovneva et al. (2023) and form an initial set
+
+of potential quality features defined in Table 20. After human evaluation and statistical analysis, the most frequent mistakes that a bad reasoning path has include inconsistency with the question, lack of step coherence (lack of a logical flow), calcu- lation mistakes, and hallucinations. In addition, we observe that LLMs are more likely to halluci- nate when the generated context gets significantly longer. In addition, we observe that the RP always leads to an incorrect answer when it 'admits' that a mistake has been made in any of the proposed steps. However, the purpose of this study is not to comprehensively analyzing common mistakes or design automated metrics, we purposely exclude features that require intensive computational cost, such as features that have to be extracted by utiliz- ing external machine learning models (SenteceBert, Transformers, or other neural network-based fea- ture extractors).
+
+A.8.2 Answer-level Features
+These features include measures such as consistency between consecutive answers (Local-Consistency), consistency with the most common previous answer (Global-Consistency), and detection of deviations from expected response formats (Parsing-Error).
+
+A.8.3 Reasoning-level Features
+Our novel contribution lies in introducing reasoning-level features, which capture the in- trinsic qualities of each Reasoning Path (RP). These features evaluate various aspects of the RP, such as the length and number of reason- ing steps (RP-Length, Num-of-Steps), the log- ical flow between steps (Step-Relevance), and the relevance to the input (Question-Relevance). We also include time depedent features that compare the current RP with previous ones (Local-Consistency, Global-Consistency) and de- tect self-acknowledged mistakes or uncertainties (Error-Admitting). Refer to Table 20 for more examples. While similar work like ROSCOE (Golovneva et al., 2023) introduces sets of reasoning-level features, our approach extends this by incorporating time-dependent features that com- pare the current RP with previous ones, allowing us to evaluate the consistency and progression of reasoning across multiple steps
+A.9 
+Preliminary Feature Analysis
+Table 8 presents the correlation coefficients be- tween each feature and the Correctness variable, along with the p-values from t-tests.
+
+
+FeatureCorrelationP-valueLocal-Consistency0.3670.00Global-Consistency0.4030.00RP-Length-0.08610.00Num-of-Steps-0.04760.00Step-Relevance-0.02641.25e-169Question-Relevance-0.04230.00Error-Admitting-0.04920.00Local-Relevance0.05300.00Global-Relevance0.08500.00Table 8: Correlation with Correctness and P-values (3 significant figures)
+
+  Global-Consistency (0.403) and Local- Consistency (0.367) show the strongest positive correlations with Correctness, suggesting these similarity measures between the actual solution and generated content are most predictive of correctness. All features show statistically significant differences between correct and incorrect instances (p-values ˜ 0). RP-Length, Error-Admitting, Question-Relevance, Num-of- Steps, and Step-Relevance have weak negative correlations, indicating that longer solutions or those with more steps are slightly less likely to be correct. Word clouds of internal mistakes (Figures 4 and 5) reveal that both LLAMA3 and GPT-3.5-TURBO models frequently acknowledge potential errors and limitations, using phrases like "There seemed to be a mistake" and "Not enough information". These findings suggest that improving the model's ability to generate solutions similar to the actual solution and encouraging concise responses could enhance performance, while the models' self-awareness of mistakes could be leveraged to improve reliability.
+
+A.10 Sample Generation Prompts
+In this study, we explore three different prompting strategies: Chain of Thought (CoT), Few-Shot, and Least-to-Most. Each strategy aims to enhance the performance of Large Language Models (LLMs) in generating reasoning paths (RPs) for given ques- tions.
+
+
+
+
+
+Figure 4:	Word Cloud of Internal Mistakes for LLAMA3
+
+
+
+
+
+
+
+
+
+
+Figure 5: Word Cloud of Internal Mistakes for GPT-3.5- TURBO
+
+A.10.1 Chain of Thought (CoT) Prompting
+CoT prompting explicitly requires LLMs to reason through the question step by step. We utilize zero- shot prompting to generate RPs in our datasets. The prompt is defined as follows:
+
+A.10.3	Least-to-Most Prompting
+The Least-to-Most approach involves break- ing down complex problems into simpler sub- problems, solving them in order of increasing com- plexity, and using those solutions to address the main question. This strategy is particularly use- ful for tackling intricate problems. The prompt is structured as follows:
+
+
+
+
+A.10.2 Few-Shot Prompting
+Few-shot prompting provides the LLM with exam- ples of how to solve problems using step-by-step reasoning. This approach helps guide the model in generating structured and detailed responses. The prompt is structured as follows:
+
+
+
+
+
+  Each of these prompting strategies aims to elicit detailed, step-by-step reasoning from the LLM, en- abling us to generate high-quality reasoning paths for analysis and comparison.
+A.11 Human Evaluation Criteria
+Annotator Profile: The evaluation was conducted by a group of 10 individuals: 7 males and 3 females. The age range of the annotators was 23-30 years old, with a median age of 25. All annotators hold
+
+technical degrees spanning mathematics, computer science, and statistics, ensuring their capability to comprehend the logic behind the generated ratio- nales effectively. Their educational backgrounds are as follows:
+• 1 Assistant Professors (1 in Computer Sci- ence)
+• 6 PhD candidates (1 in Computer Science, 4 in Data Science, 1 in Statistics)
+• 3 Master's students (1 in Data Science, 1 in Electrical Engineering, 1 in Computational Mathematics)
+  Geographically, the annotators represent two countries:
+• 3 from the United States
+• 7 from China
+  Professionally, 8 are currently in academia (1 assistant professors, 5 PhD candidates, 2 Master's students), while 2 work in industry with Master's degrees and 1-3 years of relevant work experience related to technology.
+  Ethical Considerations and Consent: Prior to participating in the evaluation process, all annota- tors were provided with information detailed the study's objectives, the nature of their participation, and how their data would be utilized. Specifically, annotators were informed that their ratings, demo- graphic information, and any generated "golden" CoTs would be used for research purposes and potentially published anonymously. They were assured of the confidentiality of their personal in- formation and the anonymization of their responses in any resulting publications. Annotators were also informed of their right to withdraw from the study at any point and request the removal of their data. The data retention policy, including the duration of data storage and the method of eventual deletion, was clearly outlined. Furthermore, annotators were provided with contact information for the research team to address any concerns or questions about their data usage.
+  Evaluation Instruction: Human evaluators were asked to rate the generated Chain of Thought (CoT) responses on two main criteria:
+1. Overall Quality [1-5]: This criterion assesses whether the generated response answers the question in a well-justified manner. The scale is interpreted as follows:
+• 
+1: Incomprehensible and completely in- correct. The response is unintelligible or entirely unrelated to the question.
+• 2: Mostly incorrect with major flaws in reasoning. The response may be par- tially related to the question but contains significant errors or misunderstandings.
+• 3: Partially correct but with notable gaps or minor errors. The response addresses the question but lacks full justification or contains some inaccuracies.
+• 4: Mostly correct with minor imperfec- tions. The response is well-justified and accurate, with only slight room for im- provement.
+• 5: Clear, correct, and fully justified. The response comprehensively answers the question with sound reasoning and no errors.
+2. Coherency [1-5]: This criterion evaluates whether the whole generated response makes sense, regardless of its correctness in address- ing the context. The scale is interpreted as follows:
+• 1: Completely incoherent. The response is a jumble of words or concepts with no logical flow or structure.
+• 2: Mostly incoherent with occasional comprehensible parts. The response has severe issues with logical flow, making it very difficult to follow.
+• 3: Partially coherent but with noticeable lapses in logic or structure. The response has a basic structure but contains confus- ing or disconnected elements.
+• 4: Mostly coherent with minor clarity issues. The response has a clear logi- cal flow with only slight ambiguities or structural weaknesses.
+• 5: Perfectly coherent and easy to under- stand. The response has a clear, logi- cal structure with smooth transitions be- tween ideas.
+  The overall score for each evaluated response is calculated as the average of these two metrics.
+  In addition to manually evaluating the best CoT responses (based on our method) and a randomly chosen CoT from SC, evaluators were also tasked with creating a "golden" CoT when necessary so
+
+that we have a reference available to calculate the BARTScore (Yuan et al., 2021). This process in- volved:
+1. Reviewing a random CoT for human-like rea- soning.
+2. Assessing whether the flow of logic closely resembles what a human solver would do, con-
+
+
+
+metric = 0.5×acc_factor+0.5×cost_factor  (4)
+  where acc_factor and cost_factor are normal- ized values of accuracy and cost, calculated as follows:
+
+???1	if acc = sc_acc
+
+• Natural, step-by-step reasoning pro- cesses
+• Logical order of steps
+
+
+  acc-sam_acc sc_acc-single_acc
+
+otherwise
+
+
+(5)
+
+• Inclusion of relevant intermediate calcu- lations or considerations
+• Appropriate level of detail for human-
+
+
+cost_factor =
+
+1	if cost = dr_cost
+0	if cost = sc_cost
+
+like problem-solving
+ 
+sc_cost-cost sc_cost-dir_cost
+
+otherwise
+
+
+(6)
+
+3. Rewriting the CoT if it did not closely resem- ble human-like reasoning, ensuring:
+• Maintenance of the correct answer while improving the reasoning process
+• Structure reflecting human approach to problem-solving
+• Clear, concise, and easy-to-follow re- sponse
+  This comprehensive evaluation process ensures a thorough assessment of the quality and coherency of generated CoT responses, as well as the creation of human-like golden standards when needed. See Table 9 for two examples.
+A.12 Evaluation Metric for Accuracy-Cost Trade-Off
+To quantitatively assess the trade-off between accu- racy and cost, we introduced a custom metric that balances both factors. This metric normalizes the accuracy and cost values and computes a weighted average to provide a single score representing the overall performance of a method.
+  Let acc denote the accuracy of a method, and cost denote the computational cost, measured as the number of samples generated. Additionally, let sc_acc and sc_cost represent the accuracy and cost of the Self-Consistency (SC) method, respectively. Let single_sample_acc and direct_cost denote the accuracy from using only the first sample's answer and the cost of the direct sampling method, respec- tively.
+The metric is defined as:
+  
+The acc_factor is normalized to be between 0 and 1, where 1 corresponds to an accuracy greater than or equal to the SC method, and 0 corresponds to an accuracy less than or equal to the accuracy using just the first sample's answer. Similarly, the cost_factor is normalized to be between 0 and 1, where 1 corresponds to a cost less than or equal to the direct sampling method, and 0 corresponds to a cost greater than or equal to the SC method. The metric function calculates the weighted average of acc_factor and cost_factor, giving equal impor- tance to both accuracy and cost. A higher value of the metric indicates a better trade-off between accu- racy and cost. This function enables us to compare different methods and configurations based on their ability to achieve high accuracy while minimizing computational cost.
+A.13 Reproducibility
+To ensure reproducibility of our results:
+• We set a fixed random seed (42) for all ran- domized processes.
+• All experiments were run using Python 3.8.10 in a conda environment. The full list of de- pendencies and their versions can be found in the requirements.txt file in our repository.
+B Appendix: Additional Results
+B.1 Impact of Base Estimator:
+The performance of different sufficiency scoring models, as summarized in Table 10, identifies Lo- gistic Regression as the most effective model in
+
+Table 9: Comparison of Best CoT, SC CoT, and Golden CoT with Human Evaluation
+
+SampleQuestionAnswer RASC RationaleSC RationaleGolden CoTRatings(Qua, Coh)BestSC1Elvis starts driv-54	If Elvis traveled westIf Elvis drove westElvis drove for 55, 51, 3ing from hismiles for 5 hours at 18mph,for 5 hours at 18mph,hours at 18mph, sohouse and trav-he covered 5 x 18he covered a dis-he covered 5 * 18els west for 5= 90 miles.  Whentance of 5 * 18 == 90 miles to thehours.	Thenhe traveled east for 890 miles. When hewest. He then turnshe turns aroundhours at 18mph, heturned around andaround and drives forand travels eastcovered 8 x 18 = 144drove east for 88 hours at 18mph,for 8 hours. Ifmiles. The distancehours at 18mph, heso he covers 8 * 18he was drivinghe is from his housecovered a distance of= 144 miles to theat an averagenow is the difference8 * 18 = 144 miles.east. The total dis-speed of 18mphbetween the two dis-The total distance hetance from his housefor both partstances, which is 144covered is 90 + 144is 144 - 90 = 54 milesof the journey,- 90 = 54 miles. The= 234 miles. How-to the east. The an-how far is heanswer is 54 miles.ever, we do not knowswer is 54 miles.from his housethe direction of hisnow?house. If he is noweast of his house, heis 144 - 90 = 54miles away. If he isnow west, he is 90 -144 = -54 miles away.So, we need moreinformation to deter-mine the distance heis from his house.2Are	theNo	The	founders	ofThe	founders	ofThe	founders	of4, 52, 4foundersSkype	are	fromSkype  are  NiklasSkype are from Eu-of Skype fromEurope,  not Asia.Zennström	andrope. The foundersAsia?The founders are Es-Janus  Friis,	bothof Skype are Esto-tonians Ahti Heinla,of whom are fromnians Ahti HeinlaPriit Kasesalu, andEurope (Sweden andand Priit Kasesalu.Jaan Tallinn. So theDenmark,	respec-Estonia is a country
+answer is no.
+
+tively).	Therefore, the answer is no.
+
+located in Northern Europe, not Asia. So the answer is no.
+
+
+
+Note: Qua = Quality, Coh = Coherency. Ratings are on a scale of 1-5, with 5 being the highest.
+
+
+
+terms of accuracy and sample utilization. This finding shows the importance of selecting an ap- propriate sufficiency scoring model to maximize
+
+
+Table 10: Performance Comparison of Sufficiency Scor- ing Models
+
+the benefits of the RASC approach. These results 	
+are obtained by training the sufficiency scoring models on the training set and then fine-tuning the best set of hyperparameters (N and T) using the customized metrics. The final evaluation is per- formed on the test set to ensure the robustness of the model.
+Among the sufficiency scoring models evaluated
+
+Logistic Regression achieves the highest accuracy of 46.0% while requiring the lowest average num- ber of samples (5.87) compared to other models. This indicates that it effectively captures the rela-
+
+Table 11: *HHEM: Hallucination Detector Model based on microsoft/deberta-v3-base, initially trained on NLI data
+
+tionship between the features extracted from the RP and the likelihood of hallucination, which al-
+
+Table 12: Performance and Time Analysis of Methods Using Llama2.
+
+lows RASC to make informed decisions during the weighted majority voting process.
+  The accuracy of Random model drops below the baseline of Self-Consistency. The poor per- formance of the Random model, which assigns sufficiency scores randomly, emphasizes the im-
+
+Method	Accuracy
+
+Inference
+
+Non-
+
+Total
+
+portance of using a well-designed scoring model in the RASC approach. Without a meaningful as- sessment of the generated content's quality and consistency, the weighted majority voting process cannot effectively distinguish between reliable and unreliable samples, leading to suboptimal results.
+  The HHEM Model, which is a DeBERTa-based hallucination detector sourced from Hugging Face (Honovich et al., 2022), does not perform as well as the other models in this context. This suggests that relying solely on a pre-trained model without considering the specific characteristics and require- ments of the RASC approach may not yield the best results. The superior performance of models like Logistic Regression (LR), Naive Bayes (NB), and Random Forest (RF), which utilize manual fea- ture engineering tailored to the RASC framework, highlights the importance of crafting features that capture the nuances of the generated content as we discussed in the method section.
+
+B.2 Statistical Significance
+To rigorously evaluate the performance of RASC, we conducted statistical significance experiments across multiple benchmarks using various lan- guage models. The comparison between RASC (Reasoning-Aware Self-Consistency) and SC (Self- Consistency) methods reveals interesting patterns across different reasoning types. In terms of cor- rectness, Tables 18 show no statistically significant differences between RASC and SC across com- mon sense, mathematical, and symbolic reasoning tasks. However, the steps comparison in Tables 19 demonstrates that RASC consistently requires
+
+Note: All values are averages per 1 question.
+
+Table 13: Pearson Correlation of Different Metrics with Human Ratings
+
+ Metric	Pearson Correlation 
+RASC Score	0.68
+BARTScore	0.52
+BLURT	0.58
+ CTC	0.65	
+Note: Higher correlation indicates closer alignment with hu- man judgments. All correlations are statistically significant (p
+< 0.01).
+
+
+  Note: SC stands for Self-Consistency, a baseline method for comparison.
+B.3 Additional Performance and Time Analysis
+This section focuses on the performance and time analysis of the open-source Llama2 model.
+  Table 14 compares different methods using the Llama2 model. RASC achieves the highest ac- curacy (38.86%) while significantly reducing in- ference time. Compared to SC, RASC improves accuracy by 0.33 percentage points and reduces total time by 66.23
+  These results demonstrate RASC's effectiveness in enhancing both performance and time efficiency. While we don't provide direct cost analysis for closed-source models, the substantial reduction in inference time achieved by RASC would likely
+
+Table 14: Performance and Time Analysis of Methods Using Llama2.
+
+significantly fewer steps than SC across all rea-		
+
+soning types, with p-values of 0 indicating strong statistical significance. This holds the same for AC
+
+Method	Accuracy
+(%)
+
+Inference Time (s)
+
+Non- Inference Time (s)
+
+Total Time (s)
+
+and RASC comparison as demonstrated in Table
+15 and Table 16 These results suggest that while RASC maintains comparable correctness to SC, it achieves this with substantially improved effi- ciency in terms of the number of steps required.
+
+SC	38.7	560.00	0.01	560.01
+ESC	39.1	313.32	0.40	313.72
+AC	38.0	263.62	0.54	264.16
+RASC	39.0	134.96	2.05	137.01
+Note: All values are averages per 1 question.
+
+Table 15: Comparison of RACS and AC Methods on Correctness
+
+Reasoning TypeMean DifferenceP-value95% CISignificantCommon Sense-0.00750.6697[-0.0565, 0.0414]NoMathematical-0.0040.745[-0.0384, 0.0383]NoSymbolic0.00330.9044[-0.0738, 0.0805]NoTable 16: Comparison of RACS and AC Methods on StepsReasoning TypeMean DifferenceP-value95% CISignificantCommon Sense-3.4301<0.0001[-4.2164, -2.6439]YesMathematical-7.4156<0.0001[-8.0905, -6.7408]YesSymbolic-7.7112<0.0001[-9.4171, -6.0052]Yes
+
+translate to significant cost savings in scenarios where API calls are charged based on usage time.
+B.4 Comparison with Existing NLG Metrics:
+To evaluate the effectiveness of our sufficiency scoring method, we compared it against three pop- ular automated metrics for natural language gen- eration: BARTScore (Yuan et al., 2021), BLURT (Sellam et al., 2020), and CTC (Deng et al., 2021). Using the same 100 samples from the faithfulness analysis, we calculated the Pearson correlation be- tween these scores and human-annotated quality ratings.
+  As shown in Table 13, RASC's sufficiency scores demonstrate a higher correlation with hu- man ratings (0.68) compared to BARTScore (0.52), BLURT (0.58), and CTC (0.65). This suggests that our scoring method more closely aligns with hu- man judgments of CoT quality in reasoning tasks, validating its effectiveness in assessing the qual- ity of generated reasoning paths. The substantial improvement over BARTScore and the slight edge over BLURT and CTC underscore RASC's capa- bility to capture nuances in reasoning quality that align more closely with human evaluations.
+B.5 Test Data Results
+To evaluate RASC's generalizability, Fig. 6 presents the performance comparison between
+
+sis is grounded in information theory and demon- strates how RASC optimizes inference-time rea- soning through a dual information gain framework that incorporates both answer consistency and rea- soning path quality.
+
+C .1	Preliminaries and Notation
+Let A denote the set of possible answers and let p(a) be the probability mass function over A. The entropy of the answer distribution is given by:
+
+H(A) = -	p(a) log p(a).
+a?A
+
+  A higher entropy H(A) implies greater uncer- tainty in the answer distribution, which corre- sponds to lower consistency. The goal of self- consistency-based inference methods is to itera- tively refine the answer distribution such that H(A) decreases over successive samples.
+  Now, let R denote the set of all possible reason- ing paths. Given an answer a ? A, we define the conditional entropy of reasoning paths given an answer as:
+
+
+H(R|A) = -   p(a)   p(r|a) log p(r|a).
+
+RASC and other methods on this dataset.
+
+a?A
+
+r?R
+
+C Theoretical Analysis of
+Reasoning-Aware Self-Consistency
+In this section, we provide a formal theoretical jus- tification for the design of the Reasoning-Aware Self-Consistency (RASC) framework. Our analy-
+  
+This quantity measures the uncertainty in the reasoning paths that lead to a particular answer. Since RASC is designed to enhance the coherence and quality of reasoning paths, it aligns with the objective of reducing H(R|A) after an answer has been proposed.
+
+Table 17: Comparison of RACS and AC Methods on Steps
+
+Reasoning TypeMean DifferenceP-value95% CISignificantCommon Sense-3.4301<0.0001[-4.2164, -2.6439]YesMathematical-7.4156<0.0001[-8.0905, -6.7408]YesSymbolic-7.7112<0.0001[-9.4171, -6.0052]YesTable 18: Comparison of RASC and SC Methods on CorrectnessReasoning TypeMean DifferenceP-value95% CISignificantCommon Sense-0.00750.6697[-0.0565, 0.0414]NoMathematical-0.00680.5819[-0.0412, 0.0275]NoSymbolic0.00670.8104[-0.0705, 0.0839]No
+
+C.2 Information Gain and Sampling Efficiency
+The information gain from each sample is defined as the reduction in uncertainty of the answer distri- bution:
+
+IG = H(Aprior) - H(Aposterior).
+  For classical self-consistency methods (e.g., Self-Consistency (SC), Early Stopping Self- Consistency (ESC), Adaptive Consistency (AC)), the information gain is driven solely by answer consistency. That is, we define:
+
+IGans = f (ci),
+  where ci is a consistency metric for the i-th sam- ple, and f : R ? R is a function characterizing how consistency influences information gain. The specific form of f varies across methods: for in- stance, ESC applies a sliding window to assess convergence, whereas AC employs an adaptive se- quence check.
+  In contrast, RASC incorporates reasoning path quality into the information gain model. Specifi- cally, the information gain is given by:
+
+IGans-RP = f (ci) + g(ri),
+  where ri represents the quality of the reason- ing path associated with the i-th sample, and g : R ? R is a function capturing the contri- bution of reasoning coherence and correctness to overall information gain. The augmentation by g(ri) ensures that the refinement of both answer consistency and reasoning quality contributes to entropy reduction.
+C.3 
+Stopping Condition and Convergence
+The sampling process in RASC is governed by an optimization criterion where sampling terminates when the cumulative information gain exceeds a predefined threshold T :
+n
+IGi = T.
+i=1
+  Given the dual contribution of answer consis- tency and reasoning coherence in RASC, the total entropy H(A) + H(R|A) decreases at a faster rate compared to answer-only self-consistency meth- ods. That is, for a given number of samples n, we have:
+
+HRASC(A, R|n) < HSC(A|n),
+  where HRASC(A, R|n) and HSC(A|n) denote the total entropy under RASC and SC, respectively, after n samples. This inequality formalizes the effi- ciency of RASC, demonstrating that fewer samples are required to reach the stopping criterion.
+C.4 Implications and Conclusion
+The theoretical analysis yields the following key conclusions:
+1. Reduction in Entropy: Answer-level fea- tures contribute to minimizing H(A), while reasoning-level features contribute to mini- mizing H(R|A). The combination ensures a more rapid decrease in overall uncertainty.
+2. Enhanced Information Gain: The presence of g(ri) in RASC ensures that each sample contributes more effectively to uncertainty re- duction, thereby accelerating convergence.
+
+Table 19: Comparison of RASC and SC Methods on Steps
+
+Reasoning TypeMean DifferenceP-value95% CISignificantCommon Sense-34.7975<0.0001[-35.0068, -34.5882]YesMathematical-32.5354<0.0001[-32.7298, -32.3409]YesSymbolic-32.4240<0.0001[-32.9474, -31.9007]Yes
+
+Figure 6: Performance of models on out-of-distribution datasets using GPT-3.5 Turbo, assessing method's robustness across diverse reasoning tasks.
+
+Table 20: Answer-Level and Reasoning-Level Feature Extraction Example.
+
+Feature	Example
+
+Answer-Level Features
+
+Local-Consistency
+(at ? at-1)
+Global-Consistency
+(at ? a1, ..., at-1)
+
+Ans1 = 3, Ans2 = 2 ? Local-Consistency = 0; Ans1 = 3, Ans2 = 3 ? Local-Consistency
+= 1
+Prev_ans = [A,B], Cur_ans = A ? Global-Consistency = 1; Prev_ans = [A,B], Cur_ans = C ? Global-Consistency = 0
+
+Parsing-Error (at)	Ans: error ? Parsing-Error = 1; Ans: 2 ? Parsing-Error = 0
+Reasoning-Level Features
+
+RP-Length	RP: "I love LLM" ? RP-Length = 3
+Num-of-Steps (rt)	RP: "Step1:xxx, Step2:xxx" ? Num-of-Steps = 2
+Step-Relevance (rt)	Step1: Paper reviewer loves LLMs; Step2: They use LLM to review my paper ?
+Step-Relevance = 3/7
+
+Question-Relevance
+(rt ? Q)
+
+Question: John loves lego, RP: Bob has 2 legos ? Question-Relevance = 0.33; Question: John loves lego, RP: John has 2 legos ? Question-Relevance = 0.66
+
+Error-Admitting (rt)	RP: It seems that I made a mistake in the previous steps ? Error-Admitting = 1
+
+Local-Relevance (rt ? rt-1) Global-Relevance (rt ? r1, ..., rt-1)
+
+RP1: I love LLM, RP2: I love LLM ? Local-Relevance = 1; RP1: I love LLM, RP2: Bob hates LLM ? Local-Relevance = 0.33
+RP1-2: [I love LLM, LLM is good], RP3: I love LLM ? Global-Relevance = 0.67; RP1-2: [I love LLM, LLM is good], RP3: Life is good ? Global-Relevance = 0.33
+
+
+
+
+
+3. Empirical Consistency: Our results confirm that RASC requires fewer samples than ESC and AC while maintaining accuracy, imply- ing that the expected information gain from reasoning evaluation g(ri) satisfies:
+
+
+E[g(ri)] > 0.
+4. Sufficiency Function Validity: The suffi- ciency function used in RASC effectively cap- tures reasoning quality, ensuring that the deci- sion to stop sampling is based on a meaning-
+
+ful reduction in uncertainty.
+  While the current formulation of g(ri) has demonstrated empirical success, future research could explore optimizing its structure via feature selection or more sophisticated scoring functions.
+
+
