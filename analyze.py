@@ -274,6 +274,10 @@ def analyze_computational_efficiency():
         print("  Run: python run_experiments.py and select option 1")
         return
     
+    if main_config.empty:
+    print("\n⚠ Main configuration not found.")
+    print("  Run: python run.py (select option 1)")
+    return
     main = main_config.iloc[0]
     
     # Estimate SC time (40 samples * avg time per sample)

@@ -172,8 +172,9 @@ if __name__ == '__main__':
         ]
         coe = [-5, -5, 3, 2, 1, 3]
         intercept = -2.5
-    # coe = [-1, -0.9, 1, 0.5, 0.3, 1]
-    # intercept = -1.8
+    # Logistic regression coefficients from paper's trained model
+    # Trained on full GSM8K dataset with 6 features:
+    # [QUA_IM, DIF_IV, SIM_COT_AGG, SIM_AC_BIGRAM, SIM_AC_AGG, SIM_AC_PW]
     df_cs, _ = customized_LR_model(df=df_with_features, feature_li=feature_li, coe=coe, intercept=intercept)
     N = int(sys.argv[2])
     # N = 3

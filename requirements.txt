@@ -1,4 +1,10 @@
 pandas
 numpy
 scikit-learn
+statsmodels
 nltk
+Levenshtein
+scipy
+tqdm
+transformers
+torch
