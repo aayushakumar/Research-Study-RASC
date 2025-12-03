@@ -188,43 +188,101 @@ def customized_LR_model(df,feature_li,coe,intercept):
     print('=================================================================================')
     return df,0.36
 
-def trained_LR_model(df, feature_li):
-    df_concate = prepare_df(df, feature_li)
-    split_idx = int(len(df_concate) * 0.8)  # 80% of the length of the dataset
-    print('Model fitting started ')
-    # Split the data into training and test sets
-    X_train = df_concate[feature_li].iloc[:split_idx]
-    y_train = df_concate['Correctness'].iloc[:split_idx]
-    X_test = df_concate[feature_li].iloc[split_idx:]
-    y_test = df_concate['Correctness'].iloc[split_idx:]
-
-    # Add a constant term to the features for the intercept for training and testing set
-    X_train = sm.add_constant(X_train)
-    X_test = sm.add_constant(X_test)
-
-    # Fit the logistic regression model using statsmodels
-    model = sm.Logit(y_train, X_train)
+def trained_LR_model_with_splits(df_train, df_val, df_test, feature_li):
+    """
+    Train LR model on train set, tune threshold on val set, 
+    return confidence scores ONLY for test set.
+    
+    Args:
+        df_train: Training questions (DataFrame)
+        df_val: Validation questions (DataFrame) 
+        df_test: Test questions (DataFrame)
+        feature_li: List of feature names
+    
+    Returns:
+        df_test_with_scores: Test DataFrame with confidence scores
+        best_threshold: Optimal threshold from validation set
+        trained_model: Fitted logistic regression model
+    """
+    print('='*70)
+    print('Training LR Model with Proper Train/Val/Test Splits')
+    print('='*70)
+    
+    # Prepare each split
+    print(f"\nPreparing train set ({len(df_train)} questions)...")
+    df_train_concate = prepare_df(df_train, feature_li)
+    
+    print(f"Preparing val set ({len(df_val)} questions)...")
+    df_val_concate = prepare_df(df_val, feature_li)
+    
+    print(f"Preparing test set ({len(df_test)} questions)...")
+    df_test_concate = prepare_df(df_test, feature_li)
+    
+    # Extract training data
+    X_train = df_train_concate[feature_li]
+    y_train = df_train_concate['Correctness']
+    
+    # Extract validation data
+    X_val = df_val_concate[feature_li]
+    y_val = df_val_concate['Correctness']
+    
+    # Extract test data
+    X_test = df_test_concate[feature_li]
+    y_test = df_test_concate['Correctness']
+    
+    print(f"\nDataset sizes (flattened samples):")
+    print(f"  Train: {len(X_train)} samples")
+    print(f"  Val:   {len(X_val)} samples")
+    print(f"  Test:  {len(X_test)} samples")
+    
+    # Add constant term for intercept
+    X_train_with_const = sm.add_constant(X_train)
+    X_val_with_const = sm.add_constant(X_val)
+    X_test_with_const = sm.add_constant(X_test)
+    
+    # Fit the logistic regression model on TRAIN SET ONLY
+    print("\nFitting logistic regression on TRAIN SET...")
+    model = sm.Logit(y_train, X_train_with_const)
     result = model.fit()
     print(result.summary())
-
-    # Make predictions on the test data (predicting probabilities)
-    y_pred_proba = result.predict(X_test)
-
-    # Calculate the AUROC
-    auroc = roc_auc_score(y_test, y_pred_proba)
-    fpr, tpr, thresholds = roc_curve(y_test, y_pred_proba)
-    f1_scores = [f1_score(y_test, y_pred_proba > thresh) for thresh in thresholds]
+    
+    # Evaluate on VALIDATION set to tune threshold
+    print("\nEvaluating on VALIDATION SET...")
+    y_val_pred_proba = result.predict(X_val_with_const)
+    
+    val_auroc = roc_auc_score(y_val, y_val_pred_proba)
+    print(f"Validation AUROC: {val_auroc:.4f}")
+    
+    # Find best threshold on validation set
+    fpr, tpr, thresholds = roc_curve(y_val, y_val_pred_proba)
+    f1_scores = [f1_score(y_val, y_val_pred_proba > thresh) for thresh in thresholds]
     best_threshold = thresholds[np.argmax(f1_scores)]
-    print(f"The AUROC score is: {auroc}")
-
-    # Calculate and store the confidence score for all data
-    df_concate['confidence_score'] = result.predict(sm.add_constant(df_concate[feature_li]))
-    NUM_OF_COT = 40  # assuming this constant defines how to split the confidence score for lists
-    lists = [df_concate['confidence_score'].iloc[i:i + NUM_OF_COT].tolist() for i in range(0, len(df_concate), NUM_OF_COT)]
-    df['confidence_score'] = lists
-    print('=================================================================================')
-
-    return df, best_threshold
+    best_f1 = max(f1_scores)
+    
+    print(f"Best threshold (from val set): {best_threshold:.4f}")
+    print(f"Best F1 score (from val set): {best_f1:.4f}")
+    
+    # Evaluate on TEST set (for reporting only, not for tuning)
+    print("\nEvaluating on TEST SET (held-out)...")
+    y_test_pred_proba = result.predict(X_test_with_const)
+    
+    test_auroc = roc_auc_score(y_test, y_test_pred_proba)
+    print(f"Test AUROC: {test_auroc:.4f}")
+    
+    # Calculate confidence scores ONLY for test set
+    df_test_concate['confidence_score'] = y_test_pred_proba
+    
+    # Reshape back to per-question format
+    NUM_OF_COT = 40
+    lists = [df_test_concate['confidence_score'].iloc[i:i + NUM_OF_COT].tolist() 
+             for i in range(0, len(df_test_concate), NUM_OF_COT)]
+    df_test_with_scores = df_test.copy()
+    df_test_with_scores['confidence_score'] = lists
+    
+    print(f"\nReturning test set with {len(df_test_with_scores)} questions")
+    print('='*70)
+    
+    return df_test_with_scores, best_threshold, result
 
 
 if __name__ == '__main__':

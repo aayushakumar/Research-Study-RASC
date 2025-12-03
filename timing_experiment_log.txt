@@ -1,0 +1,129 @@
+RASC Experiment Run Log
+Date: 2025-11-19 21:53:01
+
+
+============================================================
+Experiment: main_results_0.5_N5_PositiveN
+Configuration: T=0.5, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 39.13s
+
+============================================================
+Experiment: hyperparameter_study_0.1_N5_PositiveN
+Configuration: T=0.1, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 40.42s
+
+============================================================
+Experiment: hyperparameter_study_0.2_N5_PositiveN
+Configuration: T=0.2, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 41.54s
+
+============================================================
+Experiment: hyperparameter_study_0.3_N5_PositiveN
+Configuration: T=0.3, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 42.56s
+
+============================================================
+Experiment: hyperparameter_study_0.4_N5_PositiveN
+Configuration: T=0.4, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 41.50s
+
+============================================================
+Experiment: hyperparameter_study_0.5_N5_PositiveN
+Configuration: T=0.5, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 40.97s
+
+============================================================
+Experiment: hyperparameter_study_0.6_N5_PositiveN
+Configuration: T=0.6, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 44.18s
+
+============================================================
+Experiment: hyperparameter_study_0.7_N5_PositiveN
+Configuration: T=0.7, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 41.47s
+
+============================================================
+Experiment: hyperparameter_study_0.5_N3_PositiveN
+Configuration: T=0.5, N=3, stop=PositiveN
+Status: SUCCESS
+Duration: 52.26s
+
+============================================================
+Experiment: hyperparameter_study_0.5_N4_PositiveN
+Configuration: T=0.5, N=4, stop=PositiveN
+Status: SUCCESS
+Duration: 39.42s
+
+============================================================
+Experiment: hyperparameter_study_0.5_N5_PositiveN
+Configuration: T=0.5, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 38.38s
+
+============================================================
+Experiment: hyperparameter_study_0.5_N6_PositiveN
+Configuration: T=0.5, N=6, stop=PositiveN
+Status: SUCCESS
+Duration: 41.05s
+
+============================================================
+Experiment: hyperparameter_study_0.5_N7_PositiveN
+Configuration: T=0.5, N=7, stop=PositiveN
+Status: SUCCESS
+Duration: 42.24s
+
+============================================================
+Experiment: stopping_mechanism_0.5_N5_PositiveN
+Configuration: T=0.5, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 47.25s
+
+============================================================
+Experiment: stopping_mechanism_0.5_N5_ConsistencyN
+Configuration: T=0.5, N=5, stop=ConsistencyN
+Status: SUCCESS
+Duration: 43.18s
+
+============================================================
+Experiment: feature_ablation_0.5_N5_PositiveN_answer
+Configuration: T=0.5, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 6.73s
+
+============================================================
+Experiment: feature_ablation_0.5_N5_PositiveN_reasoning
+Configuration: T=0.5, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 47.78s
+
+============================================================
+Experiment: feature_ablation_0.5_N5_PositiveN_combined
+Configuration: T=0.5, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 58.14s
+
+============================================================
+Experiment: multi_model_0.5_N5_PositiveN_gpt-4
+Configuration: T=0.5, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 65.30s
+
+============================================================
+Experiment: multi_model_0.5_N5_PositiveN_gpt-3.5-turbo-0125
+Configuration: T=0.5, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 40.33s
+
+============================================================
+Experiment: multi_model_0.5_N5_PositiveN_claude-3-haiku-20240307
+Configuration: T=0.5, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 42.13s
