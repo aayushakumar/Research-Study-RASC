@@ -13,7 +13,7 @@ import numpy as np
 def load_experiment_result(threshold, N, stop_mechanism):
     """Load a single experiment result CSV."""
     filename = f"df_threshold_{threshold}_N_{N}_stop_{stop_mechanism}.csv"
-    filepath = Path("results/experiments_output") / filename
+    filepath = Path("result/experiments_output") / filename
     
     if not filepath.exists():
         print(f"⚠ Warning: {filename} not found")
@@ -54,7 +54,7 @@ def generate_main_results_table():
     
     if df is None:
         print("✗ Could not generate table - experiment not run yet")
-        print("  Run: python run_experiments.py and select option 1")
+        print("  Run: python run.py and select option 1")
         return
     
     metrics = calculate_metrics(df)
@@ -204,7 +204,7 @@ def export_results_to_csv():
 
 def load_timing_metrics():
     """Load all timing metrics from experiment outputs."""
-    results_dir = Path("results/experiments_output")
+    results_dir = Path("result/experiments_output")
     timing_data = []
     
     for metrics_file in results_dir.glob("*_metrics.json"):
@@ -271,13 +271,9 @@ def analyze_computational_efficiency():
     
     if main_config.empty:
         print("\n⚠ Main configuration (T=0.5, N=5, PositiveN) not found.")
-        print("  Run: python run_experiments.py and select option 1")
+        print("  Run: python run.py and select option 1")
         return
     
-    if main_config.empty:
-    print("\n⚠ Main configuration not found.")
-    print("  Run: python run.py (select option 1)")
-    return
     main = main_config.iloc[0]
     
     # Estimate SC time (40 samples * avg time per sample)
@@ -335,7 +331,7 @@ def analyze_model_timing():
     
     if model_df.empty:
         print("\n⚠ No multi-model experiments found. Run them first:")
-        print("  python run_experiments.py (select option 4 or 5)")
+        print("  python run.py (select option 4 or 5)")
         return
     
     print("\n" + "="*80)
@@ -361,18 +357,18 @@ def main():
     print("="*80)
     
     # Check if output directory exists
-    if not os.path.exists("results/experiments_output"):
-        print("\n✗ ERROR: results/experiments_output/ directory not found")
-        print("Please run experiments first using: python run_experiments.py")
+    if not os.path.exists("result/experiments_output"):
+        print("\n✗ ERROR: result/experiments_output/ directory not found")
+        print("Please run experiments first using: python run.py")
         return
     
     # Check for at least one result file
-    output_dir = Path("results/experiments_output")
+    output_dir = Path("result/experiments_output")
     csv_files = list(output_dir.glob("*.csv"))
     
     if not csv_files:
         print("\n✗ ERROR: No experiment result files found")
-        print("Please run experiments first using: python run_experiments.py")
+        print("Please run experiments first using: python run.py")
         return
     
     print(f"\n✓ Found {len(csv_files)} experiment result file(s)")

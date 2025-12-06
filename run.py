@@ -101,7 +101,7 @@ def run_experiment(threshold, N, stop_mechanism, experiment_name, feature_type=N
             feature_suffix = f"_features_{feature_type}" if feature_type and feature_type != 'combined' else ""
             model_suffix = f"_model_{model}" if model else ""
             output_file = f"df_threshold_{threshold}_N_{N}_stop_{stop_mechanism}{feature_suffix}{model_suffix}.csv"
-            print(f"  Output saved to: results/experiments_output/{output_file}")
+            print(f"  Output saved to: result/experiments_output/{output_file}")
             return True, elapsed_time, None
         else:
             print(f"✗ FAILED (after {elapsed_time:.2f}s)")
@@ -137,7 +137,7 @@ def main():
     print("\n✓ Pre-flight checks passed")
     
     # Create output directory if it doesn't exist
-    os.makedirs("results/experiments_output", exist_ok=True)
+    os.makedirs("result/experiments_output", exist_ok=True)
     
     # Track results
     results_log = []
@@ -253,8 +253,8 @@ def main():
     if failed == 0:
         print("\n✓ All experiments completed successfully!")
         print("\nNext steps:")
-        print("1. Run 'python analyze_results.py' to generate comparison tables")
-        print("2. Check results/experiments_output/ for individual experiment CSVs")
+        print("1. Run 'python analyze.py' to generate comparison tables")
+        print("2. Check result/experiments_output/ for individual experiment CSVs")
     else:
         print(f"\n⚠ {failed} experiment(s) failed. Check the log file for details.")
 

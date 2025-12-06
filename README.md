@@ -27,7 +27,7 @@ python run.py
 python analyze.py
 ```
 
-**Note:** All experiments already run! Results are in `results/experiments_output/`.
+**Note:** All experiments already run! Results are in `result/experiments_output/`.
 
 ---
 
@@ -39,8 +39,8 @@ RASC-main/
 ├── requirements.txt                   # Dependencies
 ├── RASC_NLP research paper.pdf        # Original paper
 │
-├── run_experiments.py                 # Unified experiment runner (all experiments)
-├── analyze_results.py                 # Unified analysis tool (results + timing)
+├── run.py                 # Unified experiment runner (all experiments)
+├── analyze.py                 # Unified analysis tool (results + timing)
 │
 ├── src/                               # Core implementation
 │   ├── CS_based_early_stopping.py     # Main experiment script
@@ -251,7 +251,7 @@ python src/CS_based_early_stopping.py 0.5 5 PositiveN combined claude-3-haiku-20
 
 ### Analyze Results
 ```bash
-python analyze_results.py
+python analyze.py
 # Select option 1-6:
 # 1. Table 2 (main results)
 # 2. Figure 3 (hyperparameters)  
@@ -375,8 +375,8 @@ complete dataset.
 - `result/experiments_output/*_metrics.json` - Timing data for each experiment
 
 ### Key Scripts
-- `run_experiments.py` - Unified experiment runner (all experiments: main, hyperparameter, stopping, features, models)
-- `analyze_results.py` - Unified analysis tool (generates all tables and timing analysis)
+- `run.py` - Unified experiment runner (all experiments: main, hyperparameter, stopping, features, models)
+- `analyze.py` - Unified analysis tool (generates all tables and timing analysis)
 
 ---
 

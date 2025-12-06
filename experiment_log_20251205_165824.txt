@@ -1,0 +1,9 @@
+RASC Experiment Run Log
+Date: 2025-12-05 16:58:24
+
+
+============================================================
+Experiment: main_results_0.5_N5_PositiveN
+Configuration: T=0.5, N=5, stop=PositiveN
+Status: SUCCESS
+Duration: 6.75s

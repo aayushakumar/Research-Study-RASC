@@ -153,7 +153,7 @@ def prepare_df(df, feature_li, ES_window_size = 5):
     #         print(col, ':', Counter(df_concate[col]))
     return df_concate
 def customized_LR(coe,intercept,features):
-    lincomb = sum([coe[i]*features[i] for i in range(len(coe))]) +intercept
+    lincomb = sum([coe[i]*features.iloc[i] for i in range(len(coe))]) +intercept
     return 1 / (1 + np.exp(-lincomb))
 def customized_LR_model(df,feature_li,coe,intercept):
 
