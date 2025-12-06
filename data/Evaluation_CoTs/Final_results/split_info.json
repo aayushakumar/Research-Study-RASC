@@ -1,0 +1,12 @@
+{
+  "full_dataset_size": 6554,
+  "subset_percentage": 0.3,
+  "subset_size": 1966,
+  "train_size": 1179,
+  "val_size": 393,
+  "test_size": 394,
+  "train_ratio": 0.6,
+  "val_ratio": 0.2,
+  "test_ratio": 0.2,
+  "random_state": 42
+}

@@ -129,34 +129,38 @@ def CS_early_stopping(df, threshold, N=5, stop_mechanism='PositiveN'):
 
 
 if __name__ == '__main__':
-    # file_path = os.path.join(DATA_DIR, 'final_ASC.csv')
-    # df_raw = pd.read_csv(file_path)
-    # df_with_features = pd.DataFrame(extract_feature(df_raw))
-    # df_with_features.to_json(os.path.join(DATA_DIR,'final_ASC_with_feature.json'))
-    
     # Start total timing
     script_start_time = time.time()
     
-    df_with_features = pd.read_json(os.path.join(DATA_DIR,'final_with_feature_subset.json'))
+    print("="*70)
+    print("Running with PROPER TRAIN/VAL/TEST SPLITS")
+    print("="*70)
     
-    # Multi-model support: filter by model if specified via 5th argument
-    model_filter = sys.argv[5] if len(sys.argv) > 5 else None
-    if model_filter and 'model' in df_with_features.columns:
-        df_with_features = df_with_features[df_with_features['model'] == model_filter]
-        print(f"Filtered to model: {model_filter} ({len(df_with_features)} samples)")
+    # Load the three splits
+    train_path = os.path.join(DATA_DIR, 'train_split.json')
+    val_path = os.path.join(DATA_DIR, 'val_split.json')
+    test_path = os.path.join(DATA_DIR, 'test_split.json')
     
-    # Feature ablation: allow specifying feature subset via 4th argument
-    # Default: all features (combined)
-    # Options: 'answer', 'reasoning', 'combined'
+    if not all(os.path.exists(p) for p in [train_path, val_path, test_path]):
+        print("\nERROR: Split files not found!")
+        print("Please run: python src/create_data_splits.py")
+        sys.exit(1)
+    
+    df_train = pd.read_json(train_path)
+    df_val = pd.read_json(val_path)
+    df_test = pd.read_json(test_path)
+    
+    print(f"\nLoaded splits:")
+    print(f"  Train: {len(df_train)} questions")
+    print(f"  Val:   {len(df_val)} questions")
+    print(f"  Test:  {len(df_test)} questions")
+    
+    # Feature selection
     feature_type = sys.argv[4] if len(sys.argv) > 4 else 'combined'
     
     if feature_type == 'answer':
-        # Answer-level features only
         feature_li = ['SIM_AC_BIGRAM', 'SIM_AC_AGG', 'SIM_AC_PW']
-        coe = [2, 1, 3]  # Corresponding coefficients
-        intercept = -2.5
     elif feature_type == 'reasoning':
-        # Reasoning-level features only
         feature_li = ['QUA_IM', 'DIF_IV', 'SIM_COT_AGG']
         coe = [-5, -5, 3]  # Corresponding coefficients
         intercept = -2.5
@@ -172,9 +176,8 @@ if __name__ == '__main__':
         ]
         coe = [-5, -5, 3, 2, 1, 3]
         intercept = -2.5
-    # Logistic regression coefficients from paper's trained model
-    # Trained on full GSM8K dataset with 6 features:
-    # [QUA_IM, DIF_IV, SIM_COT_AGG, SIM_AC_BIGRAM, SIM_AC_AGG, SIM_AC_PW]
+    # coe = [-1, -0.9, 1, 0.5, 0.3, 1]
+    # intercept = -1.8
     df_cs, _ = customized_LR_model(df=df_with_features, feature_li=feature_li, coe=coe, intercept=intercept)
     N = int(sys.argv[2])
     # N = 3
@@ -186,21 +189,28 @@ if __name__ == '__main__':
     # Calculate total script time
     total_script_time = time.time() - script_start_time
     
-    # Include feature type and model in filename if specified
+    # Create output filename
     feature_suffix = f"_features_{feature_type}" if feature_type != 'combined' else ""
-    model_suffix = f"_model_{model_filter}" if model_filter else ""
-    file_name = f"df_threshold_{threshold}_N_{N}_stop_{stop_mechanism}{feature_suffix}{model_suffix}.csv"
+    file_name = f"df_threshold_{threshold}_N_{N}_stop_{stop_mechanism}{feature_suffix}.csv"
+    
+    # Save results (common for both modes)
     storage_dir = os.path.join(PROJECT_ROOT, 'result', 'experiments_output')
     os.makedirs(storage_dir, exist_ok=True)
-    df.to_csv(os.path.join(storage_dir, file_name), index=False)
+    df_results.to_csv(os.path.join(storage_dir, file_name), index=False)
     
     # Save timing metrics
+    total_script_time = time.time() - script_start_time
     metrics['Total_Script_Time'] = total_script_time
     metrics_file = file_name.replace('.csv', '_metrics.json')
     with open(os.path.join(storage_dir, metrics_file), 'w') as f:
         json.dump(metrics, f, indent=2)
     
+    print(f"\n{'='*70}")
+    print("Results saved:")
+    print(f"  Data: {file_name}")
+    print(f"  Metrics: {metrics_file}")
     print(f"\nTiming Metrics:")
     print(f"  Non-inference time: {metrics['Non_Inference_Time']:.4f}s")
-    print(f"  Total time: {metrics['Total_Script_Time']:.4f}s")
+    print(f"  Total time: {total_script_time:.4f}s")
     print(f"  Avg time per sample: {metrics['Avg_Time_Per_Sample']:.4f}s")
+    print(f"{'='*70}")
