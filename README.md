@@ -11,6 +11,9 @@ This repository contains our reproduction of the RASC paper (NAACL 2025). The or
 
 We successfully reproduced 7 of 9 main experiments using a 10% stratified sample (655 out of 6,554 examples) due to computational constraints.
 
+---
+**Done By**: Aayush Kumar & Fahad Dalwai
+----
 ## Quick Start
 
 Install dependencies:
