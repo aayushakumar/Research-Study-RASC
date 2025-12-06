@@ -57,9 +57,7 @@ RASC-main/
 
 ### Experiment 1: Main Performance Comparison (Table 2)
 
-**Configuration:** T=0.5, N=5, PositiveN
-
-Configuration: T=0.5, N=5, PositiveN stopping mechanism
+Configuration: T=0.5, N=5, PositiveN
 
 **Paper Results (GPT-3.5 Turbo, Full Dataset)**
 
@@ -95,7 +93,6 @@ Analysis:
 The paper demonstrates:
 - **Threshold (T) variation:** Accuracy improves from T=0.1 (~75%) to T=0.5 (~77%)
 - **Buffer Size (N) variation:** Accuracy increases with N, with diminishing returns after N=5
-- **Optimal parameters:** T=0.5, N=5 provides best efficiency-accuracy trade-off
 - Optimal parameters: T=0.5, N=5 provides best efficiency-accuracy tradeoff
 - Sample usage ranges from ~3-15 depending on configuration
 
@@ -127,8 +124,6 @@ Results confirm N=5 as the optimal buffer size, matching the paper's hyperparame
 
 ### Experiment 3: Stopping Mechanism Comparison
 
-**Configuration:** T=0.5, N=5
-
 Configuration: T=0.5, N=5
 
 The paper describes two stopping mechanisms:
@@ -150,6 +145,7 @@ PositiveN was successfully implemented and validated. ConsistencyN comparison re
 Configuration: T=0.5, N=5, PositiveN
 
 **Paper Results (Averaged across tasks)**
+
 | Feature Set | Avg Samples | Accuracy | Finding |
 |-------------|-------------|----------|---------|
 | Answer-level only | 10.86 | 55.5% (Math) | Moderate performance |
@@ -157,11 +153,13 @@ Configuration: T=0.5, N=5, PositiveN
 | **Combined Features** | **8.20** | **55.8%** | **Best overall** |
 
 *Paper shows combined features provide best balance across Mathematical, Commonsense, and Symbolic reasoning*
-| **Combined Features** | **8.20** | **55.8%** | **Best overall** |
 
+**Our Reproduction Results**
 
-
-**Key Findings:**
+| Feature Set | Accuracy | Avg Samples | Reduction |
+|-------------|----------|-------------|-----------|
+| Answer-level only | 0.558 | 11.4 | 71.4% |
+| Reasoning-only | 0.574 | 6.8 | 82.9% |
 | **Combined (both)** | **0.584** | **13.8** | **65.5%** |
 
 Findings:
@@ -174,7 +172,7 @@ Findings:
 **Paper Results (MMLU Math Categories with GPT-4)**
 
 | Task Difficulty | SC Acc | RASC Acc | RASC Samples | Reduction |
-|----------------|--------|----------|--------------|-----------||
+|----------------|--------|----------|--------------|-----------|
 | Elementary Math | 97.8% | 97.7% | 3.11 | 92.2% |
 | College Math | 84.0% | 83.7% | 6.15 | 84.6% |
 | Abstract Algebra | 76.0% | 75.7% | 8.54 | 78.7% |
@@ -182,12 +180,6 @@ Findings:
 The paper demonstrates that harder tasks require more samples while still achieving substantial reduction (78-92%).
 
 **Our Reproduction - Dataset Type Performance**
-
-| Dataset Type | SC Acc | RASC Acc | Avg Samples | Reduction |
-|--------------|--------|----------|-------------|-----------|
-| Mathematical (GSM8K, MathQA) | 0.585 | 0.589 | 9.3 | 76.8% |
-| Reasoning (BigBench, CommonsenseQA) | 0.459 | 0.461 | 7.7 | 80.8% |
-| Mixed Datasets | 0.561 | 0.584 | 13.8 | 65.5% |
 
 | Dataset Type | SC Acc | RASC Acc | Avg Samples | Reduction |
 |--------------|--------|----------|-------------|-----------|
@@ -236,9 +228,6 @@ Our dataset contains samples from 3 models (GPT-3.5, GPT-4, Claude-3-Haiku):
 Status: Partially reproduced - validated on mixed dataset, individual model comparisons pending.
 
 ### Experiment 7: Computational Efficiency Analysis (Table 3)
-| Method | Accuracy (%) | Inference Time (s) | Non-Inference Time (s) | Total Time (s) | Speedup vs SC |
-|--------|--------------|-------------------|----------------------|----------------|---------------|
-| SC | 90.9 | 398.9 | 0.00 | 398.9 | 1.0x |
 Configuration: T=0.5, N=5, PositiveN
 
 **Paper Results (GPT-4, per question averages)**
@@ -282,14 +271,7 @@ Note: Our measurements focus on sample reduction. The paper's timing includes ac
 
 **Paper Finding:** RASC maintains ~5 samples across all prompting strategies (87% reduction)
 
-**Why not reproduced:** Requires regenerating CoT data with different prompting strategies (zero-shot, few-shot, least-to-most). Original dataset uses fixed prompting approach. Would need LLM API access and significant computation.
-
----
-| **RASC** | **69.0% / 5.1** | **75.0% / 5.3** | **85.0% / 5.0** |
-
-The paper shows RASC maintains ~5 samples across all prompting strategies (87% reduction).
-
-Why not reproduced: Requires regenerating CoT data with different prompting strategies (zero-shot, few-shot, least-to-most). The original dataset uses a fixed prompting approach, and regeneration would require LLM API access and substantial computation.
+Why not reproduced: Requires regenerating CoT data with different prompting strategies (zero-shot, few-shot, least-to-most). Original dataset uses a fixed prompting approach and regeneration would require LLM API access and significant compute.
 
 ### Experiment 9: Rationale Faithfulness Evaluation (Table 6)
 
@@ -304,27 +286,9 @@ Why not reproduced: Requires regenerating CoT data with different prompting stra
 
 **Paper Finding:** RASC selects higher-fidelity reasoning paths with better human-judged quality
 
-**Why not reproduced:** Requires:
-1. External NLP metrics (BARTScore, CTC, BLURT) not in codebase
-2. Golden reference CoTs for comparison
-3. Human evaluation setup for 200 samples
-4. Significant infrastructure beyond scope of reproduction
-| Human Eval (1-5 scale) | 4.7 | 4.0 | +0.70 |
+Why not reproduced: Requires external NLP metrics (BARTScore, CTC, BLURT), golden reference CoTs, and a human evaluation pipeline for 200 samples—all beyond this reproduction's scope.
 
-The paper demonstrates RASC selects higher-fidelity reasoning paths with better human-judged quality.
-
-Why not reproduced: Requires external NLP metrics (BARTScore, CTC, BLURT) not included in the codebase, golden reference CoTs for comparison, human evaluation infrastructure for 200 samples, and substantial additional tooling beyond the scope of this reproduction.
-
-## Methodologyf reasoning steps
-- `QUA_IM`: Quality/importance score
-- `DIF_IV`: Difficulty/diversity measure
-
-**Answer-level features (3):**
-- `SIM_AC_BIGRAM`: Bigram similarity between answers
-- `SIM_AC_AGG`: Aggregated answer similarity
-- `SIM_AC_PW`: Pairwise answer similarity
-
-**Confidence Scoring:** Logistic regression with predefined coefficients: `[-5, -5, 3, 2, 1, 3]`
+## Methodology
 ### Dataset
 
 The original paper uses 6,554 samples across 3 LLMs (GPT-3.5, GPT-4, Claude-3-Haiku) and 6 benchmarks. Due to computational constraints, we used a 10% stratified sample (655 samples, random_state=42) that maintains the statistical distribution while reducing runtime from approximately 2 hours to ~1 minute.
@@ -349,16 +313,6 @@ Confidence scoring uses logistic regression with predefined coefficients: `[-5, 
 - ConsistencyN: Collect N consecutive identical confident samples
 
 ## Results Summary
-
-### Paper Claims (NAACL 2025)eedup (GPT-4) | 2.9x potential speedup | ✅ Trend confirmed |
-| Hyperparameter Choice | T=0.5, N=5 optimal | T=0.5, N=5 optimal | ✅ Fully confirmed |
-| Stopping Mechanism | PositiveN preferred | PositiveN validated | ✅ Confirmed |
-| Feature Design | Combined > Individual | Combined achieves best acc | ✅ Validated |
-| Multi-task Generalization | 60-90% across tasks | 65-81% across tasks | ✅ Confirmed |
-| Prompting Robustness | ~5 samples all prompts | Not tested | ❌ Not reproduced |
-| Faithfulness | +0.7 human score | Not tested | ❌ Not reproduced |
-6. Feature Design: Combined reasoning + answer features essential
-7. Faithfulness: Selects higher-quality reasoning paths (0.7 point human eval improvement)
 
 ### Validation Results (10% Sample, 655 examples)
 
@@ -386,16 +340,6 @@ Reproduction success: 7/9 experiments (78%) with strong trend validation across 
 
 ## Usage
 
-### Analyze Results
-```bash
-python analyze.py
-# Select option 1-6:
-# 1. Table 2 (main results)
-# 2. Figure 3 (hyperparameters)  
-# 3. Stopping mechanism comparison
-# 4. Computational efficiency (Table 3)
-# 5. Multi-model timing comparison
-# 6. All analyses + export to CSV (RECOMMENDED)
 Run individual experiments:
 ```bash
 # Main configuration: T=0.5, N=5, PositiveN
@@ -415,7 +359,7 @@ python src/CS_based_early_stopping.py 0.5 5 PositiveN combined claude-3-haiku-20
 Analyze results:
 ```bash
 python analyze.py
-# Options: main results, hyperparameters, stopping mechanisms, 
+# Options: main results, hyperparameters, stopping mechanisms,
 # computational efficiency, multi-model timing, or all analyses
 ```
 
